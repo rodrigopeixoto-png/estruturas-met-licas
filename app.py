@@ -1,19 +1,26 @@
-import os
-import sys
-# Força a instalação das bibliotecas ignorando o erro do Streamlit
-os.system(f"{sys.executable} -m pip install streamlit pandas numpy plotly PyNiteFEA")
-
 import streamlit as st
-import plotly.graph_objects as go
-import numpy as np
-from modules.solver import MotorCalculo3D
+import sys
+import subprocess
 
-# ... (aqui continua o resto do seu código com st.set_page_config, etc.) ...import streamlit as st
-import plotly.graph_objects as go
-import numpy as np
-from modules.solver import MotorCalculo3D
-
+# 1. Configuração da página (DEVE ser a primeira linha do Streamlit)
 st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
+
+# ==========================================
+# 2. SISTEMA DE AUTO-CURA (ANTI-BUG DA NUVEM)
+# ==========================================
+try:
+    import PyNite
+except ImportError:
+    st.warning("⚙️ O servidor da nuvem ignorou a biblioteca base. Instalando o motor PyNiteFEA agora... Aguarde uns 15 segundos.")
+    # Força a instalação silenciosa direto no sistema
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyNiteFEA"])
+    st.success("✅ Instalação concluída! O aplicativo vai reiniciar sozinho...")
+    st.rerun() # Reinicia a página automaticamente
+
+# 3. Só importa o restante depois de garantir que o PyNite existe
+import plotly.graph_objects as go
+import numpy as np
+from modules.solver import MotorCalculo3D
 
 def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
@@ -71,37 +78,34 @@ def main():
 
     for y in y_coords:
         if sistema_principal == "Arco":
-            # Gera 9 pontos para simular a curva do arco
             x_pts = [0] + list(np.linspace(0, vao_x, 9)) + [vao_x]
             y_pts = [y] * 11
-            # Z: Pilares nas pontas, Parábola no meio
             z_pts = [0] + [altura_z + flecha_arco * (1 - (2*(x-vao_x/2)/vao_x)**2) for x in x_pts[1:-1]] + [0]
             
-            local_edges = [(0, 1), (9, 10)] # Pilares
-            for i in range(1, 9): local_edges.append((i, i+1)) # Curva do Arco
+            local_edges = [(0, 1), (9, 10)]
+            for i in range(1, 9): local_edges.append((i, i+1))
             
             topos_esq.append(node_offset + 1)
             topos_dir.append(node_offset + 9)
-            cumeeiras.append(node_offset + 5) # Nó central do arco
+            cumeeiras.append(node_offset + 5)
 
         elif sistema_principal == "Tesoura Plana (Treliçada)" and forma_cobertura == "2 Águas":
             h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
-            # Pilares(0,1), Bases da Treliça(2,3), Meio Banzo Inf(4), Topos(5,6), Cumeeira(7)
             x_pts = [0, vao_x, 0, vao_x, vao_x/2, vao_x/4, 3*vao_x/4, vao_x/2]
             y_pts = [y] * 8
             z_pts = [0, 0, altura_z, altura_z, altura_z, altura_z + (h_cum-altura_z)/2, altura_z + (h_cum-altura_z)/2, h_cum]
             
             local_edges = [
-                (0,2), (1,3), # Pilares
-                (2,4), (4,3), # Banzo Inferior
-                (2,5), (5,7), (7,6), (6,3), # Banzo Superior
-                (4,7), (4,5), (4,6), (2,7), (3,7) # Montantes e Diagonais
+                (0,2), (1,3), 
+                (2,4), (4,3), 
+                (2,5), (5,7), (7,6), (6,3), 
+                (4,7), (4,5), (4,6), (2,7), (3,7) 
             ]
             topos_esq.append(node_offset + 2)
             topos_dir.append(node_offset + 3)
             cumeeiras.append(node_offset + 7)
 
-        else: # Alma Cheia
+        else: 
             h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
             if forma_cobertura == "2 Águas":
                 x_pts = [0, vao_x, 0, vao_x, vao_x/2]
@@ -146,7 +150,7 @@ def main():
                 x=[all_x[edge[0]], all_x[edge[1]]], y=[all_y[edge[0]], all_y[edge[1]]], z=[all_z[edge[0]], all_z[edge[1]]],
                 mode='lines', line=dict(color='blue', width=4), showlegend=False
             ))
-        fig.update_layout(scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=500)
+        fig.update_layout(scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=550)
         st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
@@ -162,7 +166,6 @@ def main():
             with st.spinner("Resolvendo equações matriciais..."):
                 try:
                     motor = MotorCalculo3D()
-                    # Passando também o tipo de apoio para o motor
                     motor.construir_malha(all_x, all_y, all_z, edges, apoios_base)
                     motor.aplicar_carga_distribuida(q_elu, vao_x, espacamento)
                     status = motor.resolver()
