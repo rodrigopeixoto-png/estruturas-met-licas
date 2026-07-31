@@ -1,13 +1,5 @@
 import numpy as np
-
-# Importação resiliente para evitar erros em diferentes SOs e versões
-try:
-    from pynitefea import FEModel3D
-except ImportError:
-    try:
-        from PyNite import FEModel3D
-    except ImportError:
-        from pynite import FEModel3D
+from PyNite import FEModel3D
 
 
 class MotorCalculo3D:
@@ -23,31 +15,23 @@ class MotorCalculo3D:
         nu = 0.3       # Coeficiente de Poisson
         rho = 78.5     # Peso específico do aço (kN/m³)
         
-        # Adiciona material Aço ao modelo
         self.modelo.add_material('Aco', E, G, nu, rho)
-        
-        # Seção genérica inicial (Área, Iz, Iy, J em m, m⁴)
         self.modelo.add_section('Secao_Generica', 0.005, 0.0001, 0.0001, 0.00005)
 
     def construir_malha(self, nos_x, nos_y, nos_z, barras, tipo_apoio_base):
         """
         Gera os Nós, aplica as Condições de Contorno da Base e cria os Elementos de Barra.
         """
-        # 1. Adicionar Nós
         for i in range(len(nos_x)):
             nome_no = f"N{i}"
             self.modelo.add_node(nome_no, nos_x[i], nos_y[i], nos_z[i])
             
-            # Apoios na base (onde Z = 0)
             if nos_z[i] == 0:
                 if "Engastado" in tipo_apoio_base:
-                    # Engaste: Trava DX, DY, DZ, RX, RY, RZ
                     self.modelo.def_support(nome_no, True, True, True, True, True, True)
                 else:
-                    # Articulação: Trava DX, DY, DZ | Libera RX, RY, RZ
                     self.modelo.def_support(nome_no, True, True, True, False, False, False)
 
-        # 2. Adicionar Barras
         for i, (no_inicio, no_fim) in enumerate(barras):
             nome_barra = f"B{i}"
             self.modelo.add_member(nome_barra, f"N{no_inicio}", f"N{no_fim}", 'Aco', 'Secao_Generica')
@@ -56,13 +40,10 @@ class MotorCalculo3D:
         """
         Aplica a carga linear tributária (kN/m) nas barras de cobertura.
         """
-        # Carga linear tributária (kN/m) = q_ELU (kN/m²) * espaçamento entre pórticos (m)
         q_linear = q_kNm2 * espacamento
         
         for nome_barra, barra in self.modelo.Members.items():
             z_medio = (barra.i_node.Z + barra.j_node.Z) / 2.0
-            
-            # Se for uma barra de cobertura (altura Z > 0.1m), aplica a carga no sentido -Z global
             if z_medio > 0.1:
                 self.modelo.add_member_dist_load(nome_barra, Direction='FZ', w1=-q_linear, w2=-q_linear)
 
@@ -71,10 +52,8 @@ class MotorCalculo3D:
         Executa a análise matricial e extrai o resumo dos esforços solicitantes máximos.
         """
         try:
-            # Resolve a matriz de rigidez global
             self.modelo.analyze(check_stability=True)
             
-            # Dicionário para armazenar resultados máximos
             resultados = {
                 "sucesso": True,
                 "num_nos": len(self.modelo.Nodes),
@@ -85,7 +64,6 @@ class MotorCalculo3D:
                 "desloc_max_mm": 0.0
             }
 
-            # Varredura dos esforços internos nas barras
             for barra in self.modelo.Members.values():
                 try:
                     n_local = max(abs(barra.max_axial()), abs(barra.min_axial()))
@@ -100,7 +78,6 @@ class MotorCalculo3D:
                 except Exception:
                     pass
 
-            # Varredura dos deslocamentos nodais máximos
             for no in self.modelo.Nodes.values():
                 try:
                     dx = getattr(no, 'DX', {}).get('Combo 1', 0.0) or 0.0
@@ -108,7 +85,7 @@ class MotorCalculo3D:
                     dz = getattr(no, 'DZ', {}).get('Combo 1', 0.0) or 0.0
                     
                     desloc_total_m = np.sqrt(dx**2 + dy**2 + dz**2)
-                    desloc_total_mm = desloc_total_m * 1000.0 # Converte m para mm
+                    desloc_total_mm = desloc_total_m * 1000.0
                     
                     resultados["desloc_max_mm"] = max(resultados["desloc_max_mm"], desloc_total_mm)
                 except Exception:
