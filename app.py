@@ -1,14 +1,35 @@
 import sys
 import subprocess
+import site
 import importlib
 
-# Garante que o PyNiteFEA seja carregado no ambiente sem travar a inicialização
-try:
-    from PyNite import FEModel3D
-except ModuleNotFoundError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyNiteFEA"])
-    importlib.invalidate_caches()
-    from PyNite import FEModel3D
+# ==========================================
+# GARANTIA DE CARREGAMENTO DO PYNITE
+# ==========================================
+def carregar_pynite():
+    try:
+        from PyNite import FEModel3D
+        return FEModel3D
+    except ModuleNotFoundError:
+        # Instala o pacote caso a nuvem não tenha instalado
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "PyNiteFEA"])
+        
+        # Força o Python a atualizar os caminhos de pastas na memória
+        importlib.invalidate_caches()
+        try:
+            site.main()
+        except Exception:
+            pass
+        
+        for sp in site.getsitepackages():
+            if sp not in sys.path:
+                sys.path.insert(0, sp)
+                
+        from PyNite import FEModel3D
+        return FEModel3D
+
+# Garante o carregamento do módulo antes do restante do app
+FEModel3D = carregar_pynite()
 
 import streamlit as st
 import plotly.graph_objects as go
