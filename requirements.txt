@@ -1,0 +1,7 @@
+streamlit==1.32.0
+pandas==2.2.1
+numpy==1.26.4
+plotly==5.19.0
+PyNiteFEA==0.0.95
+ifcopenshell==0.7.0.231121
+fpdf2==2.7.7
