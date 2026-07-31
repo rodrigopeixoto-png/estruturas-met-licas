@@ -2,13 +2,17 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 from modules.solver import MotorCalculo3D
+from modules.checker import VerificadorNBR8800, CATALOGO_W, PROPRIEDADES_ACO
 
-# Configuração da página
 st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
 
 def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
     st.caption("Conformidade: NBR 8800 | NBR 6120 | NBR 6123")
+
+    # Guardar resultados da análise na sessão do Streamlit
+    if "res_analise" not in st.session_state:
+        st.session_state.res_analise = None
 
     # ==========================================
     # BARRA LATERAL (MENU DE CONFIGURAÇÕES)
@@ -31,6 +35,11 @@ def main():
     espacamento = st.sidebar.number_input("Espaçamento entre Pórticos [m]", min_value=2.0, max_value=12.0, value=5.0, step=0.5)
 
     st.sidebar.markdown("---")
+    st.sidebar.subheader("⚙️ Perfis e Material (NBR 8800)")
+    tipo_aco = st.sidebar.selectbox("Aço Estrutural", list(PROPRIEDADES_ACO.keys()))
+    perfil_selecionado = st.sidebar.selectbox("Perfil de Projeto (Linha W)", list(CATALOGO_W.keys()), index=2)
+
+    st.sidebar.markdown("---")
     st.sidebar.subheader("🔒 Condições de Contorno")
     apoios_base = st.sidebar.selectbox(
         "Vínculos na Base (Fundação)", 
@@ -49,9 +58,9 @@ def main():
     # ==========================================
     # PAINEL PRINCIPAL (ABAS DE NAVEGAÇÃO)
     # ==========================================
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📐 Geometria 3D", "🌪️ Cargas", "⚙️ Análise", "✅ Verificação", "📦 BIM"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📐 Geometria 3D", "🌪️ Cargas", "⚙️ Análise", "✅ Verificação NBR 8800", "📦 BIM"])
 
-    # LÓGICA PARAMÉTRICA DE GEOMETRIA
+    # GEOMETRIA
     y_coords = np.arange(0, comp_y + espacamento, espacamento)
     if y_coords[-1] != comp_y: y_coords[-1] = comp_y
         
@@ -65,30 +74,23 @@ def main():
             x_pts = [0] + list(np.linspace(0, vao_x, 9)) + [vao_x]
             y_pts = [y] * 11
             z_pts = [0] + [altura_z + flecha_arco * (1 - (2*(x-vao_x/2)/vao_x)**2) for x in x_pts[1:-1]] + [0]
-            
             local_edges = [(0, 1), (9, 10)]
             for i in range(1, 9): local_edges.append((i, i+1))
-            
             topos_esq.append(node_offset + 1)
             topos_dir.append(node_offset + 9)
             cumeeiras.append(node_offset + 5)
-
         elif sistema_principal == "Tesoura Plana (Treliçada)" and forma_cobertura == "2 Águas":
             h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
             x_pts = [0, vao_x, 0, vao_x, vao_x/2, vao_x/4, 3*vao_x/4, vao_x/2]
             y_pts = [y] * 8
             z_pts = [0, 0, altura_z, altura_z, altura_z, altura_z + (h_cum-altura_z)/2, altura_z + (h_cum-altura_z)/2, h_cum]
-            
             local_edges = [
-                (0,2), (1,3), 
-                (2,4), (4,3), 
-                (2,5), (5,7), (7,6), (6,3), 
+                (0,2), (1,3), (2,4), (4,3), (2,5), (5,7), (7,6), (6,3), 
                 (4,7), (4,5), (4,6), (2,7), (3,7) 
             ]
             topos_esq.append(node_offset + 2)
             topos_dir.append(node_offset + 3)
             cumeeiras.append(node_offset + 7)
-
         else: 
             h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
             if forma_cobertura == "2 Águas":
@@ -120,7 +122,7 @@ def main():
         if forma_cobertura == "2 Águas" or sistema_principal == "Arco":
             edges.append((cumeeiras[i], cumeeiras[i+1]))
 
-    # CÁLCULO DE CARGAS (TAB 2)
+    # CARGAS
     peso_telha = float(tipo_telha.split("(")[1].split(" ")[0])
     vk = v0 * s1 * s2 * s3
     q_vento = 0.613 * (vk ** 2) / 1000 
@@ -147,29 +149,48 @@ def main():
 
     with tab3:
         st.subheader("⚙️ Análise Estrutural Matricial 3D")
-        st.write("Clique no botão abaixo para calcular a matriz de rigidez global e resolver os esforços solicitantes no sistema.")
-        
         if st.button("🚀 Executar Análise Estrutural", type="primary"):
-            with st.spinner("Montando e invertendo matriz de rigidez..."):
-                try:
-                    motor = MotorCalculo3D()
-                    motor.construir_malha(all_x, all_y, all_z, edges, apoios_base)
-                    motor.aplicar_carga_distribuida(q_elu, vao_x, espacamento)
-                    res = motor.resolver()
-                    
-                    if res.get("sucesso") is True:
-                        st.success("✅ Análise Matricial concluída com sucesso!")
-                        c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("Normal Máx (N_sd)", f"{res['n_max_kn']:.2f} kN")
-                        c2.metric("Cortante Máx (V_sd)", f"{res['v_max_kn']:.2f} kN")
-                        c3.metric("Momento Máx (M_sd)", f"{res['m_max_knm']:.2f} kNm")
-                        c4.metric("Deslocamento Máx", f"{res['desloc_max_mm']:.2f} mm")
-                    else:
-                        st.error(f"Erro na análise: {res.get('erro')}")
-                except Exception as e:
-                    st.error(f"Erro: {e}")
+            with st.spinner("Calculando esforços solicitantes..."):
+                motor = MotorCalculo3D()
+                motor.construir_malha(all_x, all_y, all_z, edges, apoios_base)
+                motor.aplicar_carga_distribuida(q_elu, vao_x, espacamento)
+                st.session_state.res_analise = motor.resolver()
 
-    with tab4: st.write("Aguardando Verificações NBR 8800.")
+        if st.session_state.res_analise and st.session_state.res_analise.get("sucesso"):
+            res = st.session_state.res_analise
+            st.success("✅ Análise Matricial Concluída!")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Normal Máx (N_sd)", f"{res['n_max_kn']:.2f} kN")
+            c2.metric("Cortante Máx (V_sd)", f"{res['v_max_kn']:.2f} kN")
+            c3.metric("Momento Máx (M_sd)", f"{res['m_max_knm']:.2f} kNm")
+            c4.metric("Deslocamento Máx", f"{res['desloc_max_mm']:.2f} mm")
+
+    with tab4:
+        st.subheader("✅ Verificação de Segurança (NBR 8800)")
+        if not st.session_state.res_analise:
+            st.warning("⚠️ Por favor, execute a Análise Estrutural na Aba 3 primeiro.")
+        else:
+            res = st.session_state.res_analise
+            verificador = VerificadorNBR8800(perfil_selecionado, tipo_aco)
+            ver = verificador.verificar_estrutura(
+                res["n_max_kn"], res["v_max_kn"], res["m_max_knm"], res["desloc_max_mm"], vao_x
+            )
+
+            # Exibição do Status Geral
+            if ver["aprovado"]:
+                st.success(f"### 🎉 PERFIL APROVADO! (Taxa de Utilização Máxima: {ver['taxa_maxima']:.1f}%)")
+            else:
+                st.error(f"### ❌ PERFIL REPROVADO! (Taxa de Utilização Máxima: {ver['taxa_maxima']:.1f}%)")
+
+            st.markdown("---")
+            col_a, col_b, col_c, col_d = st.columns(4)
+            col_a.metric("Flexão (M_sd / M_rd)", f"{ver['ratio_M']:.1f}%", help=f"M_sd: {res['m_max_knm']:.1f} kNm | M_rd: {ver['M_rd']:.1f} kNm")
+            col_b.metric("Cisalhamento (V_sd / V_rd)", f"{ver['ratio_V']:.1f}%", help=f"V_sd: {res['v_max_kn']:.1f} kN | V_rd: {ver['V_rd']:.1f} kN")
+            col_c.metric("Compressão (N_sd / N_rd)", f"{ver['ratio_N']:.1f}%", help=f"N_sd: {res['n_max_kn']:.1f} kN | N_rd: {ver['N_rd']:.1f} kN")
+            col_d.metric("Deformação ELS (δ_sd / δ_lim)", f"{ver['ratio_delta']:.1f}%", help=f"δ_sd: {res['desloc_max_mm']:.1f} mm | Limit: {ver['delta_lim_mm']:.1f} mm")
+
+            st.progress(min(int(ver['taxa_maxima']), 100))
+
     with tab5: st.write("Aguardando Exportação IFC.")
 
 if __name__ == "__main__":
