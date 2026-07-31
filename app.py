@@ -1,4 +1,14 @@
+import os
+import sys
+# Força a instalação das bibliotecas ignorando o erro do Streamlit
+os.system(f"{sys.executable} -m pip install streamlit pandas numpy plotly PyNiteFEA")
+
 import streamlit as st
+import plotly.graph_objects as go
+import numpy as np
+from modules.solver import MotorCalculo3D
+
+# ... (aqui continua o resto do seu código com st.set_page_config, etc.) ...import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 from modules.solver import MotorCalculo3D
