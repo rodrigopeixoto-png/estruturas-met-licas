@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import numpy as np
 from modules.solver import MotorCalculo3D
 
-# Configuração inicial da página
+# Configuração da página
 st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
 
 def main():
@@ -146,8 +146,11 @@ def main():
         st.success(f"**Carga Distribuída de Projeto (q_Sd):** {q_elu:.2f} kN/m²")
 
     with tab3:
+        st.subheader("⚙️ Análise Estrutural Matricial 3D")
+        st.write("Clique no botão abaixo para calcular a matriz de rigidez global e resolver os esforços solicitantes no sistema.")
+        
         if st.button("🚀 Executar Análise Estrutural", type="primary"):
-            with st.spinner("Resolvendo equações matriciais..."):
+            with st.spinner("Montando e invertendo matriz de rigidez..."):
                 try:
                     motor = MotorCalculo3D()
                     motor.construir_malha(all_x, all_y, all_z, edges, apoios_base)
@@ -155,7 +158,7 @@ def main():
                     res = motor.resolver()
                     
                     if res.get("sucesso") is True:
-                        st.success("✅ Análise concluída com sucesso!")
+                        st.success("✅ Análise Matricial concluída com sucesso!")
                         c1, c2, c3, c4 = st.columns(4)
                         c1.metric("Normal Máx (N_sd)", f"{res['n_max_kn']:.2f} kN")
                         c2.metric("Cortante Máx (V_sd)", f"{res['v_max_kn']:.2f} kN")
