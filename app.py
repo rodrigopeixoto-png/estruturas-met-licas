@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 from modules.solver import MotorCalculo3D
-from modules.checker import VerificadorNBR8800, CATALOGO_W, PROPRIEDADES_ACO
+from modules.checker import VerificadorNBR8800, CATALOGO_LAMINADOS, CATALOGO_CHAPA_DOBRADA, CATALOGO_COMPLETO, PROPRIEDADES_ACO
 
 st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
 
@@ -34,9 +34,16 @@ def main():
     espacamento = st.sidebar.number_input("Espaçamento entre Pórticos [m]", min_value=2.0, max_value=12.0, value=5.0, step=0.5)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("⚙️ Perfis e Material (NBR 8800)")
+    st.sidebar.subheader("⚙️ Perfis por Componente (NBR 8800)")
     tipo_aco = st.sidebar.selectbox("Aço Estrutural", list(PROPRIEDADES_ACO.keys()))
-    perfil_selecionado = st.sidebar.selectbox("Perfil de Projeto (Linha W)", list(CATALOGO_W.keys()), index=2)
+
+    lista_perfis = list(CATALOGO_COMPLETO.keys())
+
+    perfil_pilares = st.sidebar.selectbox("Pilares", lista_perfis, index=3) # W 200 x 22.5
+    perfil_banzo_sup = st.sidebar.selectbox("Banzo Superior", lista_perfis, index=3) # W 200 x 22.5
+    perfil_banzo_inf = st.sidebar.selectbox("Banzo Inferior", lista_perfis, index=10) # U 150 x 50 x 3.00
+    perfil_diagonais = st.sidebar.selectbox("Diagonais", lista_perfis, index=14) # 2x L 2" x 3/16"
+    perfil_montantes = st.sidebar.selectbox("Montantes", lista_perfis, index=11) # UE 100 x 50 x 17
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("🔒 Condições de Contorno")
@@ -81,35 +88,20 @@ def main():
 
         elif sistema_principal == "Tesoura Plana (Treliçada)":
             if forma_cobertura == "1 Água":
-                # Treliça 1 Água dividida em 8 painéis
                 n_paineis = 8
                 x_sub = np.linspace(0, vao_x, n_paineis + 1)
-                h_max = vao_x * (inclinacao / 100.0)
-                
-                # Nós: Bases dos pilares (0 e 1), Banzos Inf (2 a 10), Banzos Sup (11 a 19)
                 x_pts = [0, vao_x] + list(x_sub) + list(x_sub)
                 y_pts = [y] * len(x_pts)
                 z_pts = [0, 0] + [altura_z] * (n_paineis + 1) + list(altura_z + (vao_x - x_sub) * (inclinacao / 100.0))
                 
-                local_edges = [
-                    (0, 2), (1, 2 + n_paineis) # Pilares
-                ]
-                
-                # Conexões da Treliça (Banzos, Montantes e Diagonais)
-                idx_inf = 2
-                idx_sup = 2 + (n_paineis + 1)
+                local_edges = [(0, 2), (1, 2 + n_paineis)]
+                idx_inf, idx_sup = 2, 2 + (n_paineis + 1)
                 
                 for i in range(n_paineis):
-                    # Banzo Inferior
                     local_edges.append((idx_inf + i, idx_inf + i + 1))
-                    # Banzo Superior
                     local_edges.append((idx_sup + i, idx_sup + i + 1))
-                    # Montantes
                     local_edges.append((idx_inf + i, idx_sup + i))
-                    # Diagonais
                     local_edges.append((idx_inf + i, idx_sup + i + 1))
-                
-                # Último montante
                 local_edges.append((idx_inf + n_paineis, idx_sup + n_paineis))
 
                 topos_esq.append(node_offset + idx_sup)
@@ -121,9 +113,7 @@ def main():
                 y_pts = [y] * 8
                 z_pts = [0, 0, altura_z, altura_z, altura_z, altura_z + (h_cum-altura_z)/2, altura_z + (h_cum-altura_z)/2, h_cum]
                 local_edges = [
-                    (0,2), (1,3), 
-                    (2,4), (4,3), 
-                    (2,5), (5,7), (7,6), (6,3), 
+                    (0,2), (1,3), (2,4), (4,3), (2,5), (5,7), (7,6), (6,3), 
                     (4,7), (4,5), (4,6), (2,7), (3,7) 
                 ]
                 topos_esq.append(node_offset + 2)
@@ -205,29 +195,52 @@ def main():
             c4.metric("Deslocamento Máx", f"{res['desloc_max_mm']:.2f} mm")
 
     with tab4:
-        st.subheader("✅ Verificação de Segurança (NBR 8800)")
+        st.subheader("✅ Verificação de Segurança por Componente (NBR 8800)")
         if not st.session_state.res_analise:
             st.warning("⚠️ Por favor, execute a Análise Estrutural na Aba 3 primeiro.")
         else:
             res = st.session_state.res_analise
-            verificador = VerificadorNBR8800(perfil_selecionado, tipo_aco)
-            ver = verificador.verificar_estrutura(
-                res["n_max_kn"], res["v_max_kn"], res["m_max_knm"], res["desloc_max_mm"], vao_x
-            )
+            verificador = VerificadorNBR8800(tipo_aco)
 
-            if ver["aprovado"]:
-                st.success(f"### 🎉 PERFIL APROVADO! (Taxa de Utilização Máxima: {ver['taxa_maxima']:.1f}%)")
+            # Mapeamento dos componentes com perfis e fatores de distribuição de esforços
+            componentes = [
+                ("Pilares", perfil_pilares, 1.0),
+                ("Banzo Superior", perfil_banzo_sup, 0.90),
+                ("Banzo Inferior", perfil_banzo_inf, 0.75),
+                ("Diagonais", perfil_diagonais, 0.50),
+                ("Montantes", perfil_montantes, 0.35)
+            ]
+
+            resultados_comp = []
+            tudo_aprovado = True
+
+            for nome_comp, perfil, fator in componentes:
+                v = verificador.verificar_elemento(
+                    perfil, res["n_max_kn"], res["v_max_kn"], res["m_max_knm"], res["desloc_max_mm"], vao_x, fator
+                )
+                v["componente"] = nome_comp
+                resultados_comp.append(v)
+                if not v["aprovado"]:
+                    tudo_aprovado = False
+
+            if tudo_aprovado:
+                st.success("### 🎉 TODOS OS COMPONENTES FORAM APROVADOS!")
             else:
-                st.error(f"### ❌ PERFIL REPROVADO! (Taxa de Utilização Máxima: {ver['taxa_maxima']:.1f}%)")
+                st.error("### ❌ ATENÇÃO: EXISTEM COMPONENTES COM SOBRECARGA!")
 
             st.markdown("---")
-            col_a, col_b, col_c, col_d = st.columns(4)
-            col_a.metric("Flexão (M_sd / M_rd)", f"{ver['ratio_M']:.1f}%", help=f"M_sd: {res['m_max_knm']:.1f} kNm | M_rd: {ver['M_rd']:.1f} kNm")
-            col_b.metric("Cisalhamento (V_sd / V_rd)", f"{ver['ratio_V']:.1f}%", help=f"V_sd: {res['v_max_kn']:.1f} kN | V_rd: {ver['V_rd']:.1f} kN")
-            col_c.metric("Compressão (N_sd / N_rd)", f"{ver['ratio_N']:.1f}%", help=f"N_sd: {res['n_max_kn']:.1f} kN | N_rd: {ver['N_rd']:.1f} kN")
-            col_d.metric("Deformação ELS (δ_sd / δ_lim)", f"{ver['ratio_delta']:.1f}%", help=f"δ_sd: {res['desloc_max_mm']:.1f} mm | Limit: {ver['delta_lim_mm']:.1f} mm")
 
-            st.progress(min(int(ver['taxa_maxima']), 100))
+            # Exibição individual por componente
+            for v in resultados_comp:
+                st.write(f"#### 🔹 {v['componente']} — `{v['perfil']}` *({v['familia']})*")
+                c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 2])
+                c1.metric("Status", "✅ Ok" if v['aprovado'] else "❌ Reprovado")
+                c2.metric("Taxa Utilização", f"{v['taxa_maxima']:.1f}%")
+                c3.metric("Momento (M_sd/M_rd)", f"{v['ratio_M']:.1f}%")
+                c4.metric("Normal (N_sd/N_rd)", f"{v['ratio_N']:.1f}%")
+                c5.metric("Flecha (δ_sd/δ_lim)", f"{v['ratio_delta']:.1f}%")
+                st.progress(min(int(v['taxa_maxima']), 100))
+                st.markdown("---")
 
     with tab5: st.write("Aguardando Exportação IFC.")
 
