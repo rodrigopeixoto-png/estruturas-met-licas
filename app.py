@@ -1,3 +1,15 @@
+import sys
+import subprocess
+import importlib
+
+# Garante que o PyNiteFEA seja carregado no ambiente sem travar a inicialização
+try:
+    from PyNite import FEModel3D
+except ModuleNotFoundError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyNiteFEA"])
+    importlib.invalidate_caches()
+    from PyNite import FEModel3D
+
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
@@ -151,9 +163,17 @@ def main():
                     motor = MotorCalculo3D()
                     motor.construir_malha(all_x, all_y, all_z, edges, apoios_base)
                     motor.aplicar_carga_distribuida(q_elu, vao_x, espacamento)
-                    status = motor.resolver()
-                    if status is True: st.success("✅ Análise concluída! Nós e Elementos processados com sucesso.")
-                    else: st.error(f"Erro na análise: {status}")
+                    res = motor.resolver()
+                    
+                    if res.get("sucesso") is True:
+                        st.success("✅ Análise concluída com sucesso!")
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("Normal Máx (N_sd)", f"{res['n_max_kn']:.2f} kN")
+                        c2.metric("Cortante Máx (V_sd)", f"{res['v_max_kn']:.2f} kN")
+                        c3.metric("Momento Máx (M_sd)", f"{res['m_max_knm']:.2f} kNm")
+                        c4.metric("Deslocamento Máx", f"{res['desloc_max_mm']:.2f} mm")
+                    else:
+                        st.error(f"Erro na análise: {res.get('erro')}")
                 except Exception as e:
                     st.error(f"Erro: {e}")
 
