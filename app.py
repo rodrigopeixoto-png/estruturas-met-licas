@@ -25,7 +25,7 @@ def carregar_pynite():
             if sp not in sys.path:
                 sys.path.insert(0, sp)
                 
-        from PyNite import FEModel3D
+        from pynite import FEModel3D
         return FEModel3D
 
 # Garante o carregamento do módulo antes do restante do app
