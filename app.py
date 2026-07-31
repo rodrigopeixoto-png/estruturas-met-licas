@@ -10,7 +10,6 @@ def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
     st.caption("Conformidade: NBR 8800 | NBR 6120 | NBR 6123")
 
-    # Guardar resultados da análise na sessão do Streamlit
     if "res_analise" not in st.session_state:
         st.session_state.res_analise = None
 
@@ -60,7 +59,7 @@ def main():
     # ==========================================
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📐 Geometria 3D", "🌪️ Cargas", "⚙️ Análise", "✅ Verificação NBR 8800", "📦 BIM"])
 
-    # GEOMETRIA
+    # LÓGICA PARAMÉTRICA DE GEOMETRIA
     y_coords = np.arange(0, comp_y + espacamento, espacamento)
     if y_coords[-1] != comp_y: y_coords[-1] = comp_y
         
@@ -79,19 +78,59 @@ def main():
             topos_esq.append(node_offset + 1)
             topos_dir.append(node_offset + 9)
             cumeeiras.append(node_offset + 5)
-        elif sistema_principal == "Tesoura Plana (Treliçada)" and forma_cobertura == "2 Águas":
-            h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
-            x_pts = [0, vao_x, 0, vao_x, vao_x/2, vao_x/4, 3*vao_x/4, vao_x/2]
-            y_pts = [y] * 8
-            z_pts = [0, 0, altura_z, altura_z, altura_z, altura_z + (h_cum-altura_z)/2, altura_z + (h_cum-altura_z)/2, h_cum]
-            local_edges = [
-                (0,2), (1,3), (2,4), (4,3), (2,5), (5,7), (7,6), (6,3), 
-                (4,7), (4,5), (4,6), (2,7), (3,7) 
-            ]
-            topos_esq.append(node_offset + 2)
-            topos_dir.append(node_offset + 3)
-            cumeeiras.append(node_offset + 7)
-        else: 
+
+        elif sistema_principal == "Tesoura Plana (Treliçada)":
+            if forma_cobertura == "1 Água":
+                # Treliça 1 Água dividida em 8 painéis
+                n_paineis = 8
+                x_sub = np.linspace(0, vao_x, n_paineis + 1)
+                h_max = vao_x * (inclinacao / 100.0)
+                
+                # Nós: Bases dos pilares (0 e 1), Banzos Inf (2 a 10), Banzos Sup (11 a 19)
+                x_pts = [0, vao_x] + list(x_sub) + list(x_sub)
+                y_pts = [y] * len(x_pts)
+                z_pts = [0, 0] + [altura_z] * (n_paineis + 1) + list(altura_z + (vao_x - x_sub) * (inclinacao / 100.0))
+                
+                local_edges = [
+                    (0, 2), (1, 2 + n_paineis) # Pilares
+                ]
+                
+                # Conexões da Treliça (Banzos, Montantes e Diagonais)
+                idx_inf = 2
+                idx_sup = 2 + (n_paineis + 1)
+                
+                for i in range(n_paineis):
+                    # Banzo Inferior
+                    local_edges.append((idx_inf + i, idx_inf + i + 1))
+                    # Banzo Superior
+                    local_edges.append((idx_sup + i, idx_sup + i + 1))
+                    # Montantes
+                    local_edges.append((idx_inf + i, idx_sup + i))
+                    # Diagonais
+                    local_edges.append((idx_inf + i, idx_sup + i + 1))
+                
+                # Último montante
+                local_edges.append((idx_inf + n_paineis, idx_sup + n_paineis))
+
+                topos_esq.append(node_offset + idx_sup)
+                topos_dir.append(node_offset + idx_sup + n_paineis)
+
+            else: # 2 Águas
+                h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
+                x_pts = [0, vao_x, 0, vao_x, vao_x/2, vao_x/4, 3*vao_x/4, vao_x/2]
+                y_pts = [y] * 8
+                z_pts = [0, 0, altura_z, altura_z, altura_z, altura_z + (h_cum-altura_z)/2, altura_z + (h_cum-altura_z)/2, h_cum]
+                local_edges = [
+                    (0,2), (1,3), 
+                    (2,4), (4,3), 
+                    (2,5), (5,7), (7,6), (6,3), 
+                    (4,7), (4,5), (4,6), (2,7), (3,7) 
+                ]
+                topos_esq.append(node_offset + 2)
+                topos_dir.append(node_offset + 3)
+                cumeeiras.append(node_offset + 7)
+
+        else: # Alma Cheia
             h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
             if forma_cobertura == "2 Águas":
                 x_pts = [0, vao_x, 0, vao_x, vao_x/2]
@@ -119,7 +158,7 @@ def main():
     for i in range(len(topos_esq) - 1):
         edges.append((topos_esq[i], topos_esq[i+1]))
         edges.append((topos_dir[i], topos_dir[i+1]))
-        if forma_cobertura == "2 Águas" or sistema_principal == "Arco":
+        if (forma_cobertura == "2 Águas" or sistema_principal == "Arco") and len(cumeeiras) > i:
             edges.append((cumeeiras[i], cumeeiras[i+1]))
 
     # CARGAS
@@ -176,7 +215,6 @@ def main():
                 res["n_max_kn"], res["v_max_kn"], res["m_max_knm"], res["desloc_max_mm"], vao_x
             )
 
-            # Exibição do Status Geral
             if ver["aprovado"]:
                 st.success(f"### 🎉 PERFIL APROVADO! (Taxa de Utilização Máxima: {ver['taxa_maxima']:.1f}%)")
             else:
