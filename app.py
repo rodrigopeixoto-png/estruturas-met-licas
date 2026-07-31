@@ -1,22 +1,10 @@
-import sys
-import subprocess
 import streamlit as st
-
-# 1. Configuração da página (deve ser a primeira instrução Streamlit)
-st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
-
-# 2. Instala o PyNiteFEA se necessário e força a reinicialização limpa do app
-try:
-    from PyNite import FEModel3D
-except ModuleNotFoundError:
-    st.info("⚙️ Configurando o motor de cálculo PyNiteFEA... Aguarde alguns segundos.")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyNiteFEA"])
-    st.rerun()
-
-# 3. Importações realizadas somente após garantir a presença do PyNite
 import plotly.graph_objects as go
 import numpy as np
 from modules.solver import MotorCalculo3D
+
+# Configuração inicial da página
+st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
 
 def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
