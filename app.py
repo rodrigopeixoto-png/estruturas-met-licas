@@ -1,42 +1,22 @@
 import sys
 import subprocess
-import site
-import importlib
-
-# ==========================================
-# GARANTIA DE CARREGAMENTO DO PYNITE
-# ==========================================
-def carregar_pynite():
-    try:
-        from PyNite import FEModel3D
-        return FEModel3D
-    except ModuleNotFoundError:
-        # Instala o pacote caso a nuvem não tenha instalado
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "PyNiteFEA"])
-        
-        # Força o Python a atualizar os caminhos de pastas na memória
-        importlib.invalidate_caches()
-        try:
-            site.main()
-        except Exception:
-            pass
-        
-        for sp in site.getsitepackages():
-            if sp not in sys.path:
-                sys.path.insert(0, sp)
-                
-        from pynite import FEModel3D
-        return FEModel3D
-
-# Garante o carregamento do módulo antes do restante do app
-FEModel3D = carregar_pynite()
-
 import streamlit as st
+
+# 1. Configuração da página (deve ser a primeira instrução Streamlit)
+st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
+
+# 2. Instala o PyNiteFEA se necessário e força a reinicialização limpa do app
+try:
+    from PyNite import FEModel3D
+except ModuleNotFoundError:
+    st.info("⚙️ Configurando o motor de cálculo PyNiteFEA... Aguarde alguns segundos.")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "PyNiteFEA"])
+    st.rerun()
+
+# 3. Importações realizadas somente após garantir a presença do PyNite
 import plotly.graph_objects as go
 import numpy as np
 from modules.solver import MotorCalculo3D
-
-st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
 
 def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
