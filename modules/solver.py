@@ -1,4 +1,5 @@
-from PyNite import FEModel3D
+# Importação correta no Linux (tudo em minúsculo)
+from pynitefea import FEModel3D
 
 class MotorCalculo3D:
     def __init__(self):
@@ -10,24 +11,16 @@ class MotorCalculo3D:
         self.modelo.add_section('Secao_Generica', 0.005, 0.0001, 0.0001, 0.00005)
 
     def construir_malha(self, nos_x, nos_y, nos_z, barras, tipo_apoio_base):
-        """
-        Recebe os nós e aplica as condições de contorno de acordo com a escolha do usuário.
-        """
-        # Adiciona os Nós
         for i in range(len(nos_x)):
             nome_no = f"N{i}"
             self.modelo.add_node(nome_no, nos_x[i], nos_y[i], nos_z[i])
             
-            # Condição de contorno na base (Z == 0)
             if nos_z[i] == 0:
                 if "Engastado" in tipo_apoio_base:
-                    # Trava DX, DY, DZ, RX, RY, RZ
                     self.modelo.def_support(nome_no, True, True, True, True, True, True)
                 else:
-                    # Articulado: Trava DX, DY, DZ. Libera as rotações RX, RY, RZ.
                     self.modelo.def_support(nome_no, True, True, True, False, False, False)
 
-        # Adiciona as Barras
         for i, (no_inicio, no_fim) in enumerate(barras):
             self.modelo.add_member(f"B{i}", f"N{no_inicio}", f"N{no_fim}", 'Aco', 'Secao_Generica')
 
