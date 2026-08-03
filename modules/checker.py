@@ -1,6 +1,6 @@
 import numpy as np
 
-# Catálogo completo de Perfis Laminados (Linha W Gerdau)
+# Catálogo de Perfis Laminados (Linha W Gerdau)
 CATALOGO_LAMINADOS = {
     "W 150 x 13.0": {"familia": "Laminado W", "d": 148, "bf": 100, "tw": 4.3, "tf": 4.9, "A": 16.6, "Ix": 634, "Iy": 82, "Wx": 85.7, "Wy": 16.4},
     "W 150 x 18.0": {"familia": "Laminado W", "d": 153, "bf": 102, "tw": 5.8, "tf": 7.1, "A": 23.0, "Ix": 923, "Iy": 126, "Wx": 120.7, "Wy": 24.7},
@@ -11,7 +11,7 @@ CATALOGO_LAMINADOS = {
     "W 360 x 44.0": {"familia": "Laminado W", "d": 352, "bf": 171, "tw": 6.9, "tf": 9.8, "A": 56.1, "Ix": 12185, "Iy": 816, "Wx": 692.3, "Wy": 95.5},
 }
 
-# Catálogo completo de Perfis de Chapa Dobrada (U Simples, U Enrijecido e Cantoneiras)
+# Catálogo de Perfis de Chapa Dobrada (U Simples, U Enrijecido e Cantoneiras)
 CATALOGO_CHAPA_DOBRADA = {
     "U 75 x 40 x 2.25": {"familia": "Chapa Dobrada U", "d": 75, "bf": 40, "tw": 2.25, "tf": 2.25, "A": 3.31, "Ix": 28.3, "Iy": 5.0, "Wx": 7.55, "Wy": 1.76},
     "U 100 x 40 x 2.25": {"familia": "Chapa Dobrada U", "d": 100, "bf": 40, "tw": 2.25, "tf": 2.25, "A": 3.87, "Ix": 58.2, "Iy": 5.8, "Wx": 11.64, "Wy": 1.98},
@@ -38,35 +38,26 @@ class VerificadorNBR8800:
         self.gamma_a1 = 1.10
 
     def verificar_elemento(self, nome_perfil, N_sd, V_sd, M_sd, delta_sd_mm, vao_m, fator_esforso=1.0):
-        """Verifica um grupo de barras específico para a NBR 8800."""
         perfil = CATALOGO_COMPLETO.get(nome_perfil, CATALOGO_LAMINADOS["W 200 x 22.5"])
-        fy = self.aco["fy"] / 10.0 # Converte MPa para kN/cm²
-        A = perfil["A"] # cm²
-        Wx = perfil["Wx"] # cm³
-        d = perfil["d"] / 10.0 # cm
-        tw = perfil["tw"] / 10.0 # cm
+        fy = self.aco["fy"] / 10.0 # MPa -> kN/cm²
+        A = perfil["A"]
+        Wx = perfil["Wx"]
+        d = perfil["d"] / 10.0
+        tw = perfil["tw"] / 10.0
 
-        # Esforços minorados/ponderados por elemento
         N_sd_e = abs(N_sd) * fator_esforso
         V_sd_e = abs(V_sd) * fator_esforso
         M_sd_e = abs(M_sd) * fator_esforso
 
-        # 1. Momento Resistente (kNm)
         M_rd = (Wx * fy) / (100.0 * self.gamma_a1)
-
-        # 2. Esforço Cortante Resistente (kN)
         Av = d * tw
         V_rd = (0.60 * Av * fy) / self.gamma_a1
-
-        # 3. Compressão/Tração Resistente (kN)
         N_rd = (A * fy) / self.gamma_a1
 
-        # Ratios de utilização
         ratio_N = N_sd_e / N_rd if N_rd > 0 else 0
         ratio_V = V_sd_e / V_rd if V_rd > 0 else 0
         ratio_M = M_sd_e / M_rd if M_rd > 0 else 0
 
-        # Limite de Flecha ELS
         delta_lim_mm = (vao_m * 1000.0) / 250.0
         ratio_delta = delta_sd_mm / delta_lim_mm if delta_lim_mm > 0 else 0
 
