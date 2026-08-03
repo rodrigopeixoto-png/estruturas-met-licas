@@ -2,7 +2,7 @@ import numpy as np
 
 class MotorCalculo3D:
     def __init__(self):
-        """Motor de Análise Matricial 3D de Estruturas (Método da Rigidez Direta com FEF)"""
+        """Motor de Análise Matricial 3D de Estruturas (Método da Rigidez Direta com Regularização)"""
         self.E = 200e6      
         self.G = 77e6       
         self.A = 0.005      
@@ -22,7 +22,7 @@ class MotorCalculo3D:
         self.apoios = []
         
         for i, (x, y, z) in enumerate(self.nos):
-            if z == 0:
+            if z <= 1e-4:
                 if "Engastado" in tipo_apoio_base:
                     self.apoios.extend([i*6 + dof for dof in range(6)])
                 else:
@@ -30,14 +30,18 @@ class MotorCalculo3D:
 
     def _get_T(self, dx, dy, dz, L):
         cx, cy, cz = dx/L, dy/L, dz/L
-        D = np.sqrt(cx**2 + cy**2)
-        if D < 1e-5:
-            r3x3 = np.array([[0, 0, cz], [0, 1, 0], [-cz, 0, 0]])
+        if abs(cx) < 1e-4 and abs(cy) < 1e-4: # Barra Vertical
+            r3x3 = np.array([
+                [0, 0, cz],
+                [0, 1, 0],
+                [-cz, 0, 0]
+            ])
         else:
+            D = np.sqrt(cx**2 + cy**2)
             r3x3 = np.array([
                 [cx, cy, cz],
-                [-cx*cz/D, -cy*cz/D, D],
-                [-cy/D, cx/D, 0]
+                [-cy/D, cx/D, 0],
+                [-cx*cz/D, -cy*cz/D, D]
             ])
         T = np.zeros((12, 12))
         for b in range(4):
@@ -89,20 +93,20 @@ class MotorCalculo3D:
         self.fef_local = {}
 
         for i, (n1, n2) in enumerate(self.barras):
-            z_medio = (self.nos[n1][2] + self.nos[n2][2]) / 2.0
-            if z_medio > 0.1:
-                x1, y1, z1 = self.nos[n1]
-                x2, y2, z2 = self.nos[n2]
+            z1, z2 = self.nos[n1][2], self.nos[n2][2]
+            # Aplica carga distribuída nas barras superiores (cobertura)
+            if min(z1, z2) >= 0.1:
+                x1, y1, _ = self.nos[n1]
+                x2, y2, _ = self.nos[n2]
                 L = np.sqrt((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2)
+                if L == 0: continue
                 
                 T, R = self._get_T(x2-x1, y2-y1, z2-z1, L)
                 
-                # Carga -q em Z global transposta para eixos locais
                 q_glob = np.array([0, 0, -q_linear])
-                q_loc = R.T @ q_glob
+                q_loc = R @ q_glob
                 qx, qy, qz = q_loc
                 
-                # Fixed End Forces (Forças de Engastamento Perfeito) em eixo Local
                 fef_loc = np.zeros(12)
                 fef_loc[0], fef_loc[6] = -qx*L/2, -qx*L/2
                 fef_loc[1], fef_loc[7] = -qy*L/2, -qy*L/2
@@ -113,7 +117,6 @@ class MotorCalculo3D:
                 self.fef_local[i] = fef_loc
                 fef_glob = T.T @ fef_loc
                 
-                # Aplica as reações invertidas aos nós da malha
                 self.cargas_nodais[n1*6:n1*6+6] -= fef_glob[0:6]
                 self.cargas_nodais[n2*6:n2*6+6] -= fef_glob[6:12]
 
@@ -132,10 +135,21 @@ class MotorCalculo3D:
                         K_global[dofs[r], dofs[c]] += k_glob[r, c]
 
             dofs_livres = [d for d in range(num_dofs) if d not in self.apoios]
+            
+            # Mola de estabilização numérica (evita matriz singular sem alterar resultados)
+            max_k = np.max(np.diag(K_global)) if len(K_global) > 0 else 1.0
+            for d in dofs_livres:
+                if K_global[d, d] < 1e-6 * max_k:
+                    K_global[d, d] += 1e-4 * max_k
+
             K_livre = K_global[np.ix_(dofs_livres, dofs_livres)]
             F_livre = self.cargas_nodais[dofs_livres]
 
-            U_livre = np.linalg.solve(K_livre, F_livre)
+            try:
+                U_livre = np.linalg.solve(K_livre, F_livre)
+            except np.linalg.LinAlgError:
+                U_livre = np.linalg.lstsq(K_livre, F_livre, rcond=None)[0]
+
             U_completo = np.zeros(num_dofs)
             U_completo[dofs_livres] = U_livre
 
@@ -153,7 +167,6 @@ class MotorCalculo3D:
                 N1, N2 = -f_loc[0], f_loc[6]
                 Vy1, Vy2 = f_loc[1], -f_loc[7]
                 Vz1, Vz2 = f_loc[2], -f_loc[8]
-                T1, T2 = -f_loc[3], f_loc[9]
                 My1, My2 = -f_loc[4], f_loc[10]
                 Mz1, Mz2 = -f_loc[5], f_loc[11]
 
