@@ -137,15 +137,25 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.subheader("⚙️ Perfis Estruturais (NBR 8800)")
     tipo_aco = st.sidebar.selectbox("Aço Estrutural", list(PROPRIEDADES_ACO.keys()))
+    
+    # Busca robusta pelos nomes para evitar erros de índice na interface
     lista_perfis = list(CATALOGO_COMPLETO.keys())
     lista_chapa = list(CATALOGO_CHAPA_DOBRADA.keys())
 
-    perfil_pilares = st.sidebar.selectbox("Pilares", lista_perfis, index=3) if tipo_pilar == "Pilar Metálico" else "N/A"
-    perfil_tercas = st.sidebar.selectbox("Terças de Cobertura", lista_chapa, index=1)
-    perfil_banzo_sup = st.sidebar.selectbox("Banzo Superior", lista_perfis, index=3)
-    perfil_banzo_inf = st.sidebar.selectbox("Banzo Inferior", lista_perfis, index=3 if sistema_principal != "Tesoura Plana (Treliçada)" else 10)
-    perfil_diagonais = st.sidebar.selectbox("Diagonais", lista_perfis, index=14 if sistema_principal == "Tesoura Plana (Treliçada)" else 3)
-    perfil_montantes = st.sidebar.selectbox("Montantes", lista_perfis, index=11 if sistema_principal == "Tesoura Plana (Treliçada)" else 3)
+    # Seleções Padrão de Projeto
+    idx_pilar = lista_perfis.index("W 250 x 25.3") if "W 250 x 25.3" in lista_perfis else 0
+    idx_terca = lista_chapa.index("U 100 x 40 x 2.25") if "U 100 x 40 x 2.25" in lista_chapa else 0
+    idx_banzo_sup = lista_perfis.index("U 150 x 50 x 3.00") if "U 150 x 50 x 3.00" in lista_perfis else 0
+    idx_banzo_inf = lista_perfis.index("U 150 x 50 x 3.00") if "U 150 x 50 x 3.00" in lista_perfis else 0
+    idx_diagonal = lista_perfis.index('2x L 2" x 3/16" (Dupla)') if '2x L 2" x 3/16" (Dupla)' in lista_perfis else 0
+    idx_montante = lista_perfis.index("UE 100 x 50 x 17 x 2.25") if "UE 100 x 50 x 17 x 2.25" in lista_perfis else 0
+
+    perfil_pilares = st.sidebar.selectbox("Pilares", lista_perfis, index=idx_pilar) if tipo_pilar == "Pilar Metálico" else "N/A"
+    perfil_tercas = st.sidebar.selectbox("Terças de Cobertura", lista_chapa, index=idx_terca)
+    perfil_banzo_sup = st.sidebar.selectbox("Banzo Superior", lista_perfis, index=idx_banzo_sup)
+    perfil_banzo_inf = st.sidebar.selectbox("Banzo Inferior", lista_perfis, index=idx_banzo_inf)
+    perfil_diagonais = st.sidebar.selectbox("Diagonais", lista_perfis, index=idx_diagonal)
+    perfil_montantes = st.sidebar.selectbox("Montantes", lista_perfis, index=idx_montante)
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("🔒 Condições de Contorno")
