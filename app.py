@@ -1,10 +1,72 @@
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
+from datetime import datetime
 from modules.solver import MotorCalculo3D
 from modules.checker import VerificadorNBR8800, CATALOGO_CHAPA_DOBRADA, CATALOGO_COMPLETO, PROPRIEDADES_ACO
 
 st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
+
+def gerar_relatorio_txt(dados, res_analise, resultados_comp, tudo_aprovado):
+    """Gera o texto formatado da Memória de Cálculo estrutural."""
+    data_atual = datetime.now().strftime("%d/%m/%Y às %H:%M")
+    status_global = "APROVADA" if tudo_aprovado else "REPROVADA (Requer revisão de perfis)"
+    
+    relatorio = f"""=========================================================
+      MEMÓRIA DE CÁLCULO ESTRUTURAL - DIMENSIONADOR 3D
+=========================================================
+Data de Geração: {data_atual}
+Status Global da Estrutura: {status_global}
+
+1. DADOS GEOMÉTRICOS E DE CONTORNO
+---------------------------------------------------------
+- Sistema Principal: {dados['sistema_principal']}
+- Forma da Cobertura: {dados['forma_cobertura']}
+- Tipo de Pilar: {dados['tipo_pilar']}
+- Vínculos na Base: {dados['apoios_base']}
+- Vão Transversal (X): {dados['vao_x']:.2f} m
+- Comprimento Longitudinal (Y): {dados['comp_y']:.2f} m
+- Pé-direito (Z): {dados['altura_z']:.2f} m
+- Espaçamento entre Pórticos: {dados['espacamento']:.2f} m
+
+2. CARGAS E PARÂMETROS DE VENTO (NBR 6120 / NBR 6123)
+---------------------------------------------------------
+- Cobertura: {dados['tipo_telha']}
+- Carga Permanente (Telha + Instalações): {dados['g_total']:.2f} kN/m²
+- Sobrecarga Normativa: {dados['q_sobre']:.2f} kN/m²
+- Velocidade Básica do Vento (V0): {dados['v0']:.1f} m/s
+- Fatores (S1, S2, S3): {dados['s1']}, {dados['s2']}, {dados['s3']}
+- Coeficientes de Pressão (Cpe / Cpi): {dados['cpe']} / {dados['cpi']}
+- Fator de Arrasto (Ca): {dados['c_arrasto']}
+- Pressão Dinâmica do Vento (q): {dados['q_dinamica']:.3f} kN/m²
+- Carga de Vento Líquida na Cobertura: {dados['q_vento_liquido']:.3f} kN/m²
+>> CARGA DE PROJETO COMBINADA (ELU): {dados['q_elu']:.2f} kN/m²
+
+3. ESFORÇOS SOLICITANTES MÁXIMOS (ANÁLISE MATRICIAL 3D)
+---------------------------------------------------------
+- Esforço Normal (N_sd): {res_analise['n_max_kn']:.2f} kN
+- Esforço Cortante (V_sd): {res_analise['v_max_kn']:.2f} kN
+- Momento Fletor (M_sd): {res_analise['m_max_knm']:.2f} kNm
+- Deslocamento Máximo (Flecha): {res_analise['desloc_max_mm']:.2f} mm
+
+4. VERIFICAÇÃO DE SEGURANÇA POR COMPONENTE (NBR 8800)
+---------------------------------------------------------
+Aço Estrutural Considerado: {dados['tipo_aco']}
+
+"""
+    for v in resultados_comp:
+        status_comp = "APROVADO" if v['aprovado'] else "REPROVADO"
+        relatorio += f"[{v['componente'].upper()}]\n"
+        relatorio += f"  Perfil Selecionado: {v['perfil']} ({v['familia']})\n"
+        relatorio += f"  Status: {status_comp} (Taxa de Utilização: {v['taxa_maxima']:.1f}%)\n"
+        relatorio += f"  - Flexão (M_sd / M_rd): {v['ratio_M']:.1f}%\n"
+        relatorio += f"  - Cortante (V_sd / V_rd): {v['ratio_V']:.1f}%\n"
+        relatorio += f"  - Compressão/Tração (N_sd / N_rd): {v['ratio_N']:.1f}%\n"
+        relatorio += f"  - Deformação ELS (Flecha atual / limite): {v['ratio_delta']:.1f}%\n\n"
+
+    relatorio += "=========================================================\n"
+    relatorio += "Fim do Relatório.\n"
+    return relatorio
 
 def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
@@ -32,7 +94,6 @@ def main():
         forma_cobertura = st.sidebar.selectbox("Forma da Cobertura", ["2 Águas", "1 Água"])
         inclinacao = st.sidebar.number_input("Inclinação do Telhado [%]", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
         if sistema_principal == "Tesoura Plana (Treliçada)":
-            # LIMITE AUMENTADO PARA 60 PAINÉIS
             n_paineis = st.sidebar.slider("Número Total de Painéis da Treliça", min_value=2, max_value=60, value=6, step=2)
     else:
         flecha_arco = st.sidebar.number_input("Flecha do Arco (m)", min_value=1.0, max_value=20.0, value=3.0, step=0.5)
@@ -131,16 +192,16 @@ def main():
                 idx_inf, idx_sup = off, off + (n_paineis + 1)
                 
                 for i in range(n_paineis):
-                    local_edges.append((idx_inf + i, idx_inf + i + 1)) # Banzo Inf
-                    local_edges.append((idx_sup + i, idx_sup + i + 1)) # Banzo Sup
-                    local_edges.append((idx_inf + i, idx_sup + i))     # Montante
-                    local_edges.append((idx_inf + i, idx_sup + i + 1)) # Diagonal
-                local_edges.append((idx_inf + n_paineis, idx_sup + n_paineis)) # Último Montante
+                    local_edges.append((idx_inf + i, idx_inf + i + 1))
+                    local_edges.append((idx_sup + i, idx_sup + i + 1))
+                    local_edges.append((idx_inf + i, idx_sup + i))    
+                    local_edges.append((idx_inf + i, idx_sup + i + 1)) 
+                local_edges.append((idx_inf + n_paineis, idx_sup + n_paineis)) 
 
                 topos_esq.append(node_offset + idx_sup)
                 topos_dir.append(node_offset + idx_sup + n_paineis)
 
-            else: # 2 Águas Triangulada (Pratt/Howe)
+            else: 
                 n_lado = n_paineis // 2
                 x_lado1 = np.linspace(0, vao_x/2, n_lado + 1)
                 x_lado2 = np.linspace(vao_x/2, vao_x, n_lado + 1)[1:]
@@ -159,20 +220,20 @@ def main():
                 
                 tot_p = len(x_all) - 1
                 for i in range(tot_p):
-                    local_edges.append((idx_inf + i, idx_inf + i + 1)) # Banzo Inf
-                    local_edges.append((idx_sup + i, idx_sup + i + 1)) # Banzo Sup
-                    local_edges.append((idx_inf + i, idx_sup + i))     # Montantes
+                    local_edges.append((idx_inf + i, idx_inf + i + 1))
+                    local_edges.append((idx_sup + i, idx_sup + i + 1))
+                    local_edges.append((idx_inf + i, idx_sup + i))    
                     if i < tot_p // 2:
-                        local_edges.append((idx_inf + i, idx_sup + i + 1)) # Diagonais Esq
+                        local_edges.append((idx_inf + i, idx_sup + i + 1))
                     else:
-                        local_edges.append((idx_inf + i + 1, idx_sup + i)) # Diagonais Dir
+                        local_edges.append((idx_inf + i + 1, idx_sup + i))
                 local_edges.append((idx_inf + tot_p, idx_sup + tot_p))
 
                 topos_esq.append(node_offset + idx_sup)
                 topos_dir.append(node_offset + idx_sup + tot_p)
                 cumeeiras.append(node_offset + idx_sup + (tot_p // 2))
 
-        else: # Alma Cheia
+        else: 
             h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
             if forma_cobertura == "2 Águas":
                 x_pts = ([0, vao_x] if has_pillar else []) + [0, vao_x, vao_x/2]
@@ -296,7 +357,38 @@ def main():
                 st.success("### 🎉 TODOS OS COMPONENTES METÁLICOS FORAM APROVADOS!")
             else:
                 st.error("### ❌ ATENÇÃO: EXISTEM COMPONENTES COM SOBRECARGA!")
-
+            
+            # --- BOTÃO PARA GERAR E BAIXAR MEMÓRIA DE CÁLCULO ---
+            st.markdown("---")
+            dados_relatorio = {
+                "sistema_principal": sistema_principal,
+                "forma_cobertura": forma_cobertura,
+                "tipo_pilar": tipo_pilar,
+                "apoios_base": apoios_base,
+                "vao_x": vao_x,
+                "comp_y": comp_y,
+                "altura_z": altura_z,
+                "espacamento": espacamento,
+                "tipo_telha": tipo_telha,
+                "g_total": g_total,
+                "q_sobre": q_sobre,
+                "v0": v0,
+                "s1": s1, "s2": s2, "s3": s3,
+                "cpe": cpe, "cpi": cpi, "c_arrasto": c_arrasto,
+                "q_dinamica": q_dinamica,
+                "q_vento_liquido": q_vento_liquido,
+                "q_elu": q_elu,
+                "tipo_aco": tipo_aco
+            }
+            
+            texto_memoria = gerar_relatorio_txt(dados_relatorio, res, resultados_comp, tudo_aprovado)
+            st.download_button(
+                label="📥 Baixar Memória de Cálculo (.txt)",
+                data=texto_memoria,
+                file_name="Memoria_de_Calculo_Metalica.txt",
+                mime="text/plain",
+                type="primary"
+            )
             st.markdown("---")
 
             for v in resultados_comp:
