@@ -32,7 +32,8 @@ def main():
         forma_cobertura = st.sidebar.selectbox("Forma da Cobertura", ["2 Águas", "1 Água"])
         inclinacao = st.sidebar.number_input("Inclinação do Telhado [%]", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
         if sistema_principal == "Tesoura Plana (Treliçada)":
-            n_paineis = st.sidebar.slider("Número de Painéis por Água", min_value=2, max_value=12, value=6, step=2)
+            # LIMITE AUMENTADO PARA 60 PAINÉIS
+            n_paineis = st.sidebar.slider("Número Total de Painéis da Treliça", min_value=2, max_value=60, value=6, step=2)
     else:
         flecha_arco = st.sidebar.number_input("Flecha do Arco (m)", min_value=1.0, max_value=20.0, value=3.0, step=0.5)
 
@@ -84,13 +85,13 @@ def main():
 
     # CÁLCULOS DE CARGA E VENTO SEPARADOS
     peso_telha = float(tipo_telha.split("(")[1].split(" ")[0])
-    g_total = peso_telha + carga_inst # Carga permanente
-    q_sobre = sobrecarga # Carga acidental
+    g_total = peso_telha + carga_inst 
+    q_sobre = sobrecarga 
     
     vk = v0 * s1 * s2 * s3
-    q_dinamica = 0.613 * (vk ** 2) / 1000 # kN/m²
+    q_dinamica = 0.613 * (vk ** 2) / 1000 
     cp_liquido = cpe - cpi
-    q_vento_liquido = q_dinamica * cp_liquido * c_arrasto # kN/m²
+    q_vento_liquido = q_dinamica * cp_liquido * c_arrasto 
     
     # Combinação CRÍTICA ELU
     q_elu = (1.25 * g_total) + (1.50 * q_sobre) + (1.40 * abs(q_vento_liquido))
@@ -162,9 +163,9 @@ def main():
                     local_edges.append((idx_sup + i, idx_sup + i + 1)) # Banzo Sup
                     local_edges.append((idx_inf + i, idx_sup + i))     # Montantes
                     if i < tot_p // 2:
-                        local_edges.append((idx_inf + i, idx_sup + i + 1)) # Diagonais Efetivas Lado Esq
+                        local_edges.append((idx_inf + i, idx_sup + i + 1)) # Diagonais Esq
                     else:
-                        local_edges.append((idx_inf + i + 1, idx_sup + i)) # Diagonais Efetivas Lado Dir
+                        local_edges.append((idx_inf + i + 1, idx_sup + i)) # Diagonais Dir
                 local_edges.append((idx_inf + tot_p, idx_sup + tot_p))
 
                 topos_esq.append(node_offset + idx_sup)
