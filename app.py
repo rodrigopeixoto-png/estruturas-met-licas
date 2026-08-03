@@ -8,11 +8,9 @@ from modules.checker import VerificadorNBR8800, CATALOGO_CHAPA_DOBRADA, CATALOGO
 st.set_page_config(page_title="Dimensionador Metálico 3D", page_icon="🏗️", layout="wide")
 
 def desenhar_diagrama(res, tipo_diagrama):
-    """Gera um gráfico 3D Plotly com os diagramas de esforços aplicados sobre a estrutura"""
     fig = go.Figure()
     nos, barras, esforcos = res["nos"], res["barras"], res["esforcos"]
     
-    # 1. Desenha a estrutura base em linhas finas
     for n1, n2 in barras:
         x1, y1, z1 = nos[n1]
         x2, y2, z2 = nos[n2]
@@ -21,7 +19,6 @@ def desenhar_diagrama(res, tipo_diagrama):
             mode='lines', line=dict(color='lightgrey', width=2), showlegend=False
         ))
         
-    # 2. Plota os resultados
     if tipo_diagrama == "Reações de Apoio":
         rx, ry, rz, texts = [], [], [], []
         for no_idx, reac in res["reacoes"].items():
@@ -33,18 +30,15 @@ def desenhar_diagrama(res, tipo_diagrama):
         fig.add_trace(go.Scatter3d(
             x=rx, y=ry, z=rz, mode='markers+text',
             marker=dict(size=8, color='purple', symbol='diamond'),
-            text=texts, textposition="top center", textfont=dict(size=12, color='purple'), showlegend=False
+            text=texts, textposition="top center", textfont=dict(size=11, color='purple'), showlegend=False
         ))
-        
     else:
-        # Descobrir máximo global para normalizar a escala do desenho
         max_val = 1e-5
         for esf in esforcos:
             v1, v2 = (esf["N"] if "Normal" in tipo_diagrama else (esf["Vz"] if "Cortante" in tipo_diagrama else esf["My"]))
             max_val = max(max_val, abs(v1), abs(v2))
             
-        escala = 1.2 / max_val # O diagrama terá no máximo 1.2m visuais de tamanho
-        
+        escala = 1.2 / max_val
         for i, esf in enumerate(esforcos):
             n1, n2 = esf["n1"], esf["n2"]
             x1, y1, z1 = nos[n1]
@@ -63,34 +57,17 @@ def desenhar_diagrama(res, tipo_diagrama):
                 v1, v2 = esf["My"]
                 cor = 'darkorange'
                 
-            # Identifica direção normal para jogar o desenho
-            if abs(dz)/L > 0.95: nx, ny, nz = 1, 0, 0
-            else: nx, ny, nz = 0, 0, 1
-                
+            nx, ny, nz = (1, 0, 0) if abs(dz)/L > 0.95 else (0, 0, 1)
             ox1, oy1, oz1 = x1 + nx*v1*escala, y1 + ny*v1*escala, z1 + nz*v1*escala
             ox2, oy2, oz2 = x2 + nx*v2*escala, y2 + ny*v2*escala, z2 + nz*v2*escala
             
-            # Linha de contorno do diagrama
             fig.add_trace(go.Scatter3d(
                 x=[x1, ox1, ox2, x2], y=[y1, oy1, oy2, y2], z=[z1, oz1, oz2, z2],
                 mode='lines', line=dict(color=cor, width=3), showlegend=False
             ))
-            
-            # Hachuras (linhas de preenchimento)
-            hx, hy, hz = [], [], []
-            for step in range(1, 5):
-                f = step / 5.0
-                px, py, pz = x1 + f*dx, y1 + f*dy, z1 + f*dz
-                val = v1 + f*(v2 - v1)
-                hx.extend([px, px + nx*val*escala, None])
-                hy.extend([py, py + ny*val*escala, None])
-                hz.extend([pz, pz + nz*val*escala, None])
-                
-            fig.add_trace(go.Scatter3d(x=hx, y=hy, z=hz, mode='lines', line=dict(color=cor, width=1), showlegend=False))
 
-    fig.update_layout(scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=650)
+    fig.update_layout(scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=600)
     return fig
-
 
 def gerar_relatorio_txt(dados, res_analise, resultados_comp, tudo_aprovado):
     data_atual = datetime.now().strftime("%d/%m/%Y às %H:%M")
@@ -129,7 +106,6 @@ Status Global da Estrutura: {status_global}
         status_comp = "APROVADO" if v['aprovado'] else "REPROVADO"
         relatorio += f"[{v['componente'].upper()}]\n  Perfil: {v['perfil']} ({v['familia']})\n  Status: {status_comp} (Taxa: {v['taxa_maxima']:.1f}%)\n\n"
     return relatorio
-
 
 def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
@@ -192,7 +168,7 @@ def main():
     # ABAS
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📐 Geometria", "🌪️ Cargas", "⚙️ Análise", "✅ Verificação", "📊 Diagramas", "📦 BIM"])
 
-    # Cargas
+    # CARGAS
     peso_telha = float(tipo_telha.split("(")[1].split(" ")[0])
     g_total = peso_telha + carga_inst 
     q_sobre = sobrecarga 
@@ -202,22 +178,22 @@ def main():
     q_vento_liquido = q_dinamica * cp_liquido * c_arrasto 
     q_elu = (1.25 * g_total) + (1.50 * q_sobre) + (1.40 * abs(q_vento_liquido))
 
-    # Geometria Paramétrica Simplificada
+    # GEOMETRIA PARAMÉTRICA
     y_coords = np.arange(0, comp_y + espacamento, espacamento)
     if y_coords[-1] != comp_y: y_coords[-1] = comp_y
-    all_x, all_y, all_z, edges, topos_esq, topos_dir, cumeeiras = [], [], [], [], [], [], []
+    all_x, all_y, all_z, edges = [], [], [], []
+    cobertura_por_frame = []
     node_offset, has_pillar = 0, (tipo_pilar != "Sem Pilar")
 
     for y in y_coords:
+        nos_cobertura_local = []
         if sistema_principal == "Arco":
             x_pts = [0] + list(np.linspace(0, vao_x, 9)) + [vao_x]
             y_pts = [y] * 11
             z_pts = ([0] if has_pillar else [altura_z]) + [altura_z + flecha_arco * (1 - (2*(x-vao_x/2)/vao_x)**2) for x in x_pts[1:-1]] + ([0] if has_pillar else [altura_z])
             local_edges = [(0, 1), (9, 10)] if has_pillar else []
             for i in range(1, 9): local_edges.append((i, i+1))
-            topos_esq.append(node_offset + (1 if has_pillar else 0))
-            topos_dir.append(node_offset + (9 if has_pillar else 10))
-            cumeeiras.append(node_offset + 5)
+            nos_cobertura_local = [node_offset + i for i in range(1, 10)]
 
         elif sistema_principal == "Tesoura Plana (Treliçada)":
             if forma_cobertura == "1 Água":
@@ -232,8 +208,7 @@ def main():
                 for i in range(n_paineis):
                     local_edges.extend([(idx_inf+i, idx_inf+i+1), (idx_sup+i, idx_sup+i+1), (idx_inf+i, idx_sup+i), (idx_inf+i, idx_sup+i+1)])
                 local_edges.append((idx_inf + n_paineis, idx_sup + n_paineis)) 
-                topos_esq.append(node_offset + idx_sup)
-                topos_dir.append(node_offset + idx_sup + n_paineis)
+                nos_cobertura_local = [node_offset + idx_sup + p for p in range(n_paineis + 1)]
             else: 
                 n_lado = n_paineis // 2
                 x_all = np.concatenate([np.linspace(0, vao_x/2, n_lado + 1), np.linspace(vao_x/2, vao_x, n_lado + 1)[1:]])
@@ -248,11 +223,9 @@ def main():
                     local_edges.extend([(idx_inf+i, idx_inf+i+1), (idx_sup+i, idx_sup+i+1), (idx_inf+i, idx_sup+i)])
                     local_edges.append((idx_inf+i, idx_sup+i+1) if i < tot_p//2 else (idx_inf+i+1, idx_sup+i))
                 local_edges.append((idx_inf + tot_p, idx_sup + tot_p))
-                topos_esq.append(node_offset + idx_sup)
-                topos_dir.append(node_offset + idx_sup + tot_p)
-                cumeeiras.append(node_offset + idx_sup + (tot_p // 2))
+                nos_cobertura_local = [node_offset + idx_sup + p for p in range(len(x_all))]
 
-        else: 
+        else: # Alma Cheia
             h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
             if forma_cobertura == "2 Águas":
                 x_pts = ([0, vao_x] if has_pillar else []) + [0, vao_x, vao_x/2]
@@ -260,9 +233,7 @@ def main():
                 z_pts = ([0, 0] if has_pillar else []) + [altura_z, altura_z, h_cum]
                 off = 2 if has_pillar else 0
                 local_edges = ([(0, off), (1, off+1)] if has_pillar else []) + [(off, off+2), (off+2, off+1)]
-                topos_esq.append(node_offset + off)
-                topos_dir.append(node_offset + off + 1)
-                cumeeiras.append(node_offset + off + 2)
+                nos_cobertura_local = [node_offset + off, node_offset + off + 2, node_offset + off + 1]
             else:
                 h_cum = altura_z + vao_x * (inclinacao / 100.0)
                 x_pts = ([0, vao_x] if has_pillar else []) + [0, vao_x]
@@ -270,16 +241,17 @@ def main():
                 z_pts = ([0, 0] if has_pillar else []) + [altura_z, h_cum]
                 off = 2 if has_pillar else 0
                 local_edges = ([(0, off), (1, off+1)] if has_pillar else []) + [(off, off+1)]
-                topos_esq.append(node_offset + off)
-                topos_dir.append(node_offset + off + 1)
+                nos_cobertura_local = [node_offset + off, node_offset + off + 1]
 
         all_x.extend(x_pts); all_y.extend(y_pts); all_z.extend(z_pts)
         for edge in local_edges: edges.append((edge[0] + node_offset, edge[1] + node_offset))
+        cobertura_por_frame.append(nos_cobertura_local)
         node_offset += len(x_pts)
         
-    for i in range(len(topos_esq) - 1):
-        edges.extend([(topos_esq[i], topos_esq[i+1]), (topos_dir[i], topos_dir[i+1])])
-        if (forma_cobertura == "2 Águas" or sistema_principal == "Arco") and len(cumeeiras) > i: edges.append((cumeeiras[i], cumeeiras[i+1]))
+    # CONEXÕES LONGITUDINAIS (TERÇAS EM TODOS OS NÓS DA COBERTURA)
+    for f in range(len(cobertura_por_frame) - 1):
+        for p in range(len(cobertura_por_frame[f])):
+            edges.append((cobertura_por_frame[f][p], cobertura_por_frame[f+1][p]))
 
     with tab1:
         fig = go.Figure()
@@ -296,7 +268,7 @@ def main():
     with tab3:
         st.subheader("⚙️ Análise Estrutural Matricial 3D")
         if st.button("🚀 Executar Análise Estrutural", type="primary"):
-            with st.spinner("Calculando esforços solicitantes..."):
+            with st.spinner("Calculando matriz de rigidez e esforços..."):
                 motor = MotorCalculo3D()
                 motor.construir_malha(all_x, all_y, all_z, edges, apoios_base)
                 motor.aplicar_carga_distribuida(q_elu, vao_x, espacamento)
@@ -331,7 +303,6 @@ def main():
             if tudo_aprovado: st.success("### 🎉 ESTRUTURA APROVADA!")
             else: st.error("### ❌ ESTRUTURA REPROVADA!")
             
-            # Botão de Memória de Cálculo
             st.markdown("---")
             dados_relatorio = {"sistema_principal": sistema_principal, "forma_cobertura": forma_cobertura, "tipo_pilar": tipo_pilar, "apoios_base": apoios_base, "vao_x": vao_x, "comp_y": comp_y, "altura_z": altura_z, "espacamento": espacamento, "tipo_telha": tipo_telha, "g_total": g_total, "q_sobre": q_sobre, "v0": v0, "s1": s1, "s2": s2, "s3": s3, "cpe": cpe, "cpi": cpi, "c_arrasto": c_arrasto, "q_dinamica": q_dinamica, "q_vento_liquido": q_vento_liquido, "q_elu": q_elu, "tipo_aco": tipo_aco}
             texto_memoria = gerar_relatorio_txt(dados_relatorio, res, resultados_comp, tudo_aprovado)
