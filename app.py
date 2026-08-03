@@ -225,7 +225,7 @@ def main():
                 local_edges.append((idx_inf + tot_p, idx_sup + tot_p))
                 nos_cobertura_local = [node_offset + idx_sup + p for p in range(len(x_all))]
 
-        else: # Alma Cheia
+        else: 
             h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
             if forma_cobertura == "2 Águas":
                 x_pts = ([0, vao_x] if has_pillar else []) + [0, vao_x, vao_x/2]
@@ -248,10 +248,9 @@ def main():
         cobertura_por_frame.append(nos_cobertura_local)
         node_offset += len(x_pts)
         
-    # CONEXÕES LONGITUDINAIS (TERÇAS EM TODOS OS NÓS DA COBERTURA)
-    for f in range(len(cobertura_por_frame) - 1):
-        for p in range(len(cobertura_por_frame[f])):
-            edges.append((cobertura_por_frame[f][p], cobertura_por_frame[f+1][p]))
+    for i in range(len(cobertura_por_frame) - 1):
+        for p in range(len(cobertura_por_frame[i])):
+            edges.append((cobertura_por_frame[i][p], cobertura_por_frame[i+1][p]))
 
     with tab1:
         fig = go.Figure()
@@ -284,13 +283,21 @@ def main():
             c4.metric("Deslocamento Máx", f"{res['desloc_max_mm']:.2f} mm")
 
     with tab4:
-        st.subheader("✅ Verificação NBR 8800 e Memória de Cálculo")
-        if not st.session_state.res_analise: st.warning("⚠️ Execute a Análise Estrutural na Aba 3 primeiro.")
+        st.subheader("✅ Verificação de Segurança por Componente (NBR 8800)")
+        if not st.session_state.res_analise: 
+            st.warning("⚠️ Execute a Análise Estrutural na Aba 3 primeiro.")
         else:
             res = st.session_state.res_analise
             verificador = VerificadorNBR8800(tipo_aco)
-            componentes = [("Terças de Cobertura", perfil_tercas, 0.30), ("Banzo Superior", perfil_banzo_sup, 0.90), ("Banzo Inferior", perfil_banzo_inf, 0.75), ("Diagonais", perfil_diagonais, 0.50), ("Montantes", perfil_montantes, 0.35)]
-            if tipo_pilar == "Pilar Metálico": componentes.insert(0, ("Pilares Metálicos", perfil_pilares, 1.0))
+            componentes = [
+                ("Terças de Cobertura", perfil_tercas, 0.30),
+                ("Banzo Superior", perfil_banzo_sup, 0.90),
+                ("Banzo Inferior", perfil_banzo_inf, 0.75),
+                ("Diagonais", perfil_diagonais, 0.50),
+                ("Montantes", perfil_montantes, 0.35)
+            ]
+            if tipo_pilar == "Pilar Metálico": 
+                componentes.insert(0, ("Pilares Metálicos", perfil_pilares, 1.0))
 
             resultados_comp = []
             tudo_aprovado = True
@@ -300,18 +307,31 @@ def main():
                 resultados_comp.append(v)
                 if not v["aprovado"]: tudo_aprovado = False
 
-            if tudo_aprovado: st.success("### 🎉 ESTRUTURA APROVADA!")
-            else: st.error("### ❌ ESTRUTURA REPROVADA!")
+            if tudo_aprovado: 
+                st.success("### 🎉 TODOS OS COMPONENTES FORAM APROVADOS!")
+            else: 
+                st.error("### ❌ ESTRUTURA REPROVADA! (Ajuste a bitola dos perfis)")
             
+            # Botão de Memória de Cálculo
             st.markdown("---")
             dados_relatorio = {"sistema_principal": sistema_principal, "forma_cobertura": forma_cobertura, "tipo_pilar": tipo_pilar, "apoios_base": apoios_base, "vao_x": vao_x, "comp_y": comp_y, "altura_z": altura_z, "espacamento": espacamento, "tipo_telha": tipo_telha, "g_total": g_total, "q_sobre": q_sobre, "v0": v0, "s1": s1, "s2": s2, "s3": s3, "cpe": cpe, "cpi": cpi, "c_arrasto": c_arrasto, "q_dinamica": q_dinamica, "q_vento_liquido": q_vento_liquido, "q_elu": q_elu, "tipo_aco": tipo_aco}
             texto_memoria = gerar_relatorio_txt(dados_relatorio, res, resultados_comp, tudo_aprovado)
             st.download_button(label="📥 Baixar Memória de Cálculo (.txt)", data=texto_memoria, file_name="Memoria_Calculo.txt", mime="text/plain", type="primary")
             st.markdown("---")
 
+            # EXIBIÇÃO COMPLETA DAS MÉTRICAS E PROGRESSO
             for v in resultados_comp:
-                st.write(f"#### 🔹 {v['componente']} — `{v['perfil']}`")
-                st.progress(min(int(v['taxa_maxima']), 100))
+                st.write(f"#### 🔹 {v['componente']} — `{v['perfil']}` *({v['familia']})*")
+                c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 2])
+                c1.metric("Status", "✅ Ok" if v['aprovado'] else "❌ Reprovado")
+                c2.metric("Taxa Utilização", f"{v['taxa_maxima']:.1f}%")
+                c3.metric("Momento (M_sd/M_rd)", f"{v['ratio_M']:.1f}%")
+                c4.metric("Normal (N_sd/N_rd)", f"{v['ratio_N']:.1f}%")
+                c5.metric("Flecha (δ_sd/δ_lim)", f"{v['ratio_delta']:.1f}%")
+                
+                prog_val = min(max(int(v['taxa_maxima']), 0), 100)
+                st.progress(prog_val)
+                st.markdown("---")
 
     with tab5:
         st.subheader("📊 Diagramas de Esforços Internos e Reações")
