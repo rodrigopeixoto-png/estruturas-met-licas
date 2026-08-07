@@ -83,13 +83,13 @@ Status Global da Estrutura: {status_global}
 ---------------------------------------------------------
 - Sistema Principal: {dados['sistema_principal']}
 - Tipo de Pilar: {dados['tipo_pilar']}
-- Distribuição dos Pilares: {dados['distribuicao_pilares']}
+- Distribuição dos Pilares: {dados.get('distribuicao_pilares', 'N/A')}
 - Vão Transversal (X): {dados['vao_x']:.2f} m
 - Comprimento Longitudinal (Y): {dados['comp_y']:.2f} m
 - Altura (Z): {dados['altura_z']:.2f} m
 - Espaçamento entre Pórticos Principais: {dados['espacamento']:.2f} m
 """
-    if dados['sistema_principal'] == "Mezanino Metálico":
+    if dados['sistema_principal'] == "Mezanino / Passarela Metálica":
         relatorio += f"- Espaçamento entre Vigotas Transversais: {dados['espacamento_vigota']:.2f} m\n"
         relatorio += f"- Tipo de Piso: {dados['tipo_piso']}\n"
 
@@ -125,7 +125,7 @@ def main():
     st.sidebar.title("Configurações Gerais")
     sistema_principal = st.sidebar.selectbox(
         "Sistema Principal", 
-        ["Pórtico Alma Cheia", "Tesoura Plana (Treliçada)", "Arco", "Mezanino Metálico"]
+        ["Pórtico Alma Cheia", "Tesoura Plana (Treliçada)", "Arco", "Mezanino / Passarela Metálica"]
     )
     
     tipo_pilar = st.sidebar.selectbox(
@@ -145,15 +145,23 @@ def main():
     espacamento_vigota = 1.00
     tipo_piso = "N/A"
 
-    if sistema_principal == "Mezanino Metálico":
-        st.sidebar.markdown("**📐 Parâmetros do Mezanino**")
+    if sistema_principal == "Mezanino / Passarela Metálica":
+        st.sidebar.markdown("**📐 Parâmetros do Piso/Passarela**")
         tipo_piso = st.sidebar.selectbox(
             "Tipo de Piso", 
             ["Painel Wall / Masterboard (0.30 kN/m²)", "Steel Deck + Concreto (2.00 kN/m²)", "Chapa Xadrez Metálica (0.40 kN/m²)", "Painel OSB / Madeira (0.25 kN/m²)"]
         )
         sobrecarga_opcao = st.sidebar.selectbox(
             "Uso / Sobrecarga (NBR 6120)", 
-            ["Escritórios / Leve (2.50 kN/m²)", "Residencial (1.50 kN/m²)", "Comercial / Lojas (3.00 kN/m²)", "Depósito Leve (4.00 kN/m²)", "Depósito Pesado (5.00 kN/m²)"]
+            [
+                "Escritórios / Leve (2.50 kN/m²)", 
+                "Residencial (1.50 kN/m²)", 
+                "Comercial / Lojas (3.00 kN/m²)", 
+                "Depósito Leve (4.00 kN/m²)", 
+                "Depósito Pesado (5.00 kN/m²)",
+                "Passarela - Manutenção/Sem Público (3.00 kN/m²)",
+                "Passarela - Acesso Público (5.00 kN/m²)"
+            ]
         )
         sobrecarga = float(sobrecarga_opcao.split("(")[1].split(" ")[0])
         espacamento_vigota = st.sidebar.number_input("Espaçamento Vigotas Transversais [m]", min_value=0.40, max_value=3.00, value=1.00, step=0.10)
@@ -166,10 +174,10 @@ def main():
     else:
         flecha_arco = st.sidebar.number_input("Flecha do Arco (m)", min_value=1.0, max_value=20.0, value=3.0, step=0.5)
 
-    vao_x = st.sidebar.number_input("Vão Transversal (X) [m]", min_value=2.0, max_value=60.0, value=15.0 if sistema_principal != "Mezanino Metálico" else 6.0, step=0.5)
-    comp_y = st.sidebar.number_input("Comprimento Longitudinal (Y) [m]", min_value=2.0, max_value=120.0, value=30.0 if sistema_principal != "Mezanino Metálico" else 12.0, step=0.5)
-    altura_z = st.sidebar.number_input("Pé-direito / Altura (Z) [m]", min_value=0.0 if tipo_pilar == "Sem Pilar (Apenas Estrutura Superior)" else 1.5, max_value=20.0, value=3.0 if sistema_principal == "Mezanino Metálico" else 6.0, step=0.5)
-    espacamento = st.sidebar.number_input("Espaçamento entre Pórticos [m]", min_value=1.5, max_value=12.0, value=3.0 if sistema_principal == "Mezanino Metálico" else 5.0, step=0.5)
+    vao_x = st.sidebar.number_input("Vão Transversal (X) [m]", min_value=1.0, max_value=60.0, value=15.0 if sistema_principal != "Mezanino / Passarela Metálica" else 6.0, step=0.5)
+    comp_y = st.sidebar.number_input("Comprimento Longitudinal (Y) [m]", min_value=2.0, max_value=120.0, value=30.0 if sistema_principal != "Mezanino / Passarela Metálica" else 12.0, step=0.5)
+    altura_z = st.sidebar.number_input("Pé-direito / Altura (Z) [m]", min_value=0.0 if tipo_pilar == "Sem Pilar (Apenas Estrutura Superior)" else 1.5, max_value=20.0, value=3.0 if sistema_principal == "Mezanino / Passarela Metálica" else 6.0, step=0.5)
+    espacamento = st.sidebar.number_input("Espaçamento entre Pórticos/Apoios [m]", min_value=1.5, max_value=12.0, value=3.0 if sistema_principal == "Mezanino / Passarela Metálica" else 5.0, step=0.5)
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("⚙️ Perfis Estruturais (NBR 8800)")
@@ -178,10 +186,10 @@ def main():
     lista_perfis = list(CATALOGO_COMPLETO.keys())
     lista_chapa = list(CATALOGO_CHAPA_DOBRADA.keys())
 
-    if sistema_principal == "Mezanino Metálico":
+    if sistema_principal == "Mezanino / Passarela Metálica":
         perfil_pilares = st.sidebar.selectbox("Pilares", lista_perfis, index=lista_perfis.index("W 200 x 22.5") if "W 200 x 22.5" in lista_perfis else 0) if tipo_pilar == "Pilar Metálico" else "N/A"
-        perfil_viga_principal = st.sidebar.selectbox("Vigas Principais (Mestras)", lista_perfis, index=lista_perfis.index("W 250 x 25.3") if "W 250 x 25.3" in lista_perfis else 0)
-        perfil_vigotas = st.sidebar.selectbox("Vigas Secundárias (Vigotas)", lista_perfis, index=lista_perfis.index("U 150 x 50 x 3.00") if "U 150 x 50 x 3.00" in lista_perfis else 0)
+        perfil_viga_principal = st.sidebar.selectbox("Vigas Principais (Longitudinais)", lista_perfis, index=lista_perfis.index("W 250 x 25.3") if "W 250 x 25.3" in lista_perfis else 0)
+        perfil_vigotas = st.sidebar.selectbox("Vigas Secundárias (Transversais)", lista_perfis, index=lista_perfis.index("U 150 x 50 x 3.00") if "U 150 x 50 x 3.00" in lista_perfis else 0)
     else:
         perfil_pilares = st.sidebar.selectbox("Pilares", lista_perfis, index=lista_perfis.index("W 250 x 25.3") if "W 250 x 25.3" in lista_perfis else 0) if tipo_pilar == "Pilar Metálico" else "N/A"
         perfil_tercas = st.sidebar.selectbox("Terças de Cobertura", lista_chapa, index=lista_chapa.index("U 100 x 40 x 2.25") if "U 100 x 40 x 2.25" in lista_chapa else 0)
@@ -196,7 +204,7 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("🌪️ Cargas / Vento")
-    if sistema_principal != "Mezanino Metálico":
+    if sistema_principal != "Mezanino / Passarela Metálica":
         tipo_telha = st.sidebar.selectbox("Tipo de Cobertura", ["Trapezoidal (0.05 kN/m²)", "Termoacústica (0.15 kN/m²)", "Fibrocimento (0.18 kN/m²)"])
         carga_inst = st.sidebar.number_input("Carga Instalações [kN/m²]", min_value=0.0, value=0.10, step=0.02)
         sobrecarga = st.sidebar.number_input("Sobrecarga [kN/m²]", min_value=0.0, value=0.25, step=0.05)
@@ -212,7 +220,7 @@ def main():
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📐 Geometria", "🌪️ Cargas", "⚙️ Análise", "✅ Verificação", "📊 Diagramas", "📦 BIM"])
 
     # CÁLCULOS DE CARGAS
-    if sistema_principal == "Mezanino Metálico":
+    if sistema_principal == "Mezanino / Passarela Metálica":
         peso_piso = float(tipo_piso.split("(")[1].split(" ")[0])
         carga_inst = 0.15
         g_total = peso_piso + carga_inst
@@ -235,7 +243,7 @@ def main():
     all_x, all_y, all_z, edges = [], [], [], []
     has_pillar = (tipo_pilar != "Sem Pilar (Apenas Estrutura Superior)")
 
-    if sistema_principal == "Mezanino Metálico":
+    if sistema_principal == "Mezanino / Passarela Metálica":
         y_vigotas = np.arange(0, comp_y + espacamento_vigota, espacamento_vigota)
         if y_vigotas[-1] != comp_y: y_vigotas[-1] = comp_y
         
@@ -277,7 +285,6 @@ def main():
                 edges.append((n_base_dir, n_topo_dir))
 
     else:
-        # LÓGICA DE COBERTURA
         cobertura_por_frame = []
         node_offset = 0
         for i_y, y in enumerate(y_coords):
@@ -347,7 +354,6 @@ def main():
             cobertura_por_frame.append(nos_cobertura_local)
             node_offset += len(x_pts)
             
-        # Conexões longitudinais
         for i in range(len(cobertura_por_frame) - 1):
             for p in range(len(cobertura_por_frame[i])):
                 edges.append((cobertura_por_frame[i][p], cobertura_por_frame[i+1][p]))
@@ -375,7 +381,7 @@ def main():
             with st.spinner("Calculando matriz de rigidez e esforços..."):
                 motor = MotorCalculo3D()
                 motor.construir_malha(all_x, all_y, all_z, edges, apoios_base)
-                espacamento_calc = espacamento_vigota if sistema_principal == "Mezanino Metálico" else espacamento
+                espacamento_calc = espacamento_vigota if sistema_principal == "Mezanino / Passarela Metálica" else espacamento
                 motor.aplicar_carga_distribuida(q_elu, vao_x, espacamento_calc)
                 st.session_state.res_analise = motor.resolver()
 
@@ -396,10 +402,10 @@ def main():
             res = st.session_state.res_analise
             verificador = VerificadorNBR8800(tipo_aco)
 
-            if sistema_principal == "Mezanino Metálico":
+            if sistema_principal == "Mezanino / Passarela Metálica":
                 componentes = [
-                    ("Vigas Secundárias (Vigotas)", perfil_vigotas, 0.50),
-                    ("Vigas Principais (Mestras)", perfil_viga_principal, 1.00)
+                    ("Vigas Secundárias (Transversais)", perfil_vigotas, 0.50),
+                    ("Vigas Principais (Longitudinais)", perfil_viga_principal, 1.00)
                 ]
             else:
                 componentes = [
@@ -432,7 +438,7 @@ def main():
                 "tipo_pilar": tipo_pilar, "distribuicao_pilares": distribuicao_pilares,
                 "apoios_base": apoios_base, "vao_x": vao_x, "comp_y": comp_y,
                 "altura_z": altura_z, "espacamento": espacamento, "espacamento_vigota": espacamento_vigota,
-                "tipo_piso": tipo_piso, "g_total": g_total, "q_sobre": q_sobre, "q_vento_liquido": q_vento_liquido if sistema_principal != "Mezanino Metálico" else 0.0,
+                "tipo_piso": tipo_piso, "g_total": g_total, "q_sobre": q_sobre, "q_vento_liquido": q_vento_liquido if sistema_principal != "Mezanino / Passarela Metálica" else 0.0,
                 "q_elu": q_elu, "tipo_aco": tipo_aco
             }
             texto_memoria = gerar_relatorio_txt(dados_relatorio, res, resultados_comp, tudo_aprovado)
