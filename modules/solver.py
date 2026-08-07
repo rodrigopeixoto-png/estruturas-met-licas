@@ -2,23 +2,18 @@ import numpy as np
 
 class MotorCalculo3D:
     def __init__(self):
-        """Motor de Análise Matricial 3D de Estruturas (Método da Rigidez Direta com Regularização)"""
-        self.E = 200e6      
-        self.G = 77e6       
-        self.A = 0.005      
-        self.Iy = 0.0001    
-        self.Iz = 0.0001    
-        self.J = 0.00005    
-        
+        """Motor Matricial 3D com Propriedades Reais por Elemento e Agrupamento de Esforços"""
+        self.E = 200e6  # kPa (200 GPa)
+        self.G = 77e6   # kPa (77 GPa)
         self.nos = []
         self.barras = []
         self.apoios = []
         self.cargas_nodais = []
         self.fef_local = {}
 
-    def construir_malha(self, nos_x, nos_y, nos_z, barras, tipo_apoio_base):
+    def construir_malha(self, nos_x, nos_y, nos_z, barras_info, tipo_apoio_base):
         self.nos = list(zip(nos_x, nos_y, nos_z))
-        self.barras = barras
+        self.barras = barras_info  # Lista de dicionários: {'n1', 'n2', 'A', 'Iy', 'Iz', 'J', 'grupo'}
         self.apoios = []
         
         for i, (x, y, z) in enumerate(self.nos):
@@ -30,41 +25,35 @@ class MotorCalculo3D:
 
     def _get_T(self, dx, dy, dz, L):
         cx, cy, cz = dx/L, dy/L, dz/L
-        if abs(cx) < 1e-4 and abs(cy) < 1e-4: # Barra Vertical
-            r3x3 = np.array([
-                [0, 0, cz],
-                [0, 1, 0],
-                [-cz, 0, 0]
-            ])
+        if abs(cx) < 1e-4 and abs(cy) < 1e-4: # Barra Vertical (Pilares)
+            r3x3 = np.array([[0, 0, cz], [0, 1, 0], [-cz, 0, 0]])
         else:
             D = np.sqrt(cx**2 + cy**2)
-            r3x3 = np.array([
-                [cx, cy, cz],
-                [-cy/D, cx/D, 0],
-                [-cx*cz/D, -cy*cz/D, D]
-            ])
+            r3x3 = np.array([[cx, cy, cz], [-cy/D, cx/D, 0], [-cx*cz/D, -cy*cz/D, D]])
         T = np.zeros((12, 12))
-        for b in range(4):
-            T[b*3:(b+1)*3, b*3:(b+1)*3] = r3x3
+        for b in range(4): T[b*3:(b+1)*3, b*3:(b+1)*3] = r3x3
         return T, r3x3
 
-    def _matriz_elemento_3d(self, no1, no2):
-        x1, y1, z1 = self.nos[no1]
-        x2, y2, z2 = self.nos[no2]
+    def _matriz_elemento_3d(self, barra):
+        n1, n2 = barra['n1'], barra['n2']
+        A, Iy, Iz, J = barra['A'], barra['Iy'], barra['Iz'], barra['J']
+        
+        x1, y1, z1 = self.nos[n1]
+        x2, y2, z2 = self.nos[n2]
         dx, dy, dz = x2 - x1, y2 - y1, z2 - z1
         L = np.sqrt(dx**2 + dy**2 + dz**2)
         if L == 0: L = 1e-6
         
         k_loc = np.zeros((12, 12))
-        EA_L = (self.E * self.A) / L
+        EA_L = (self.E * A) / L
         k_loc[0, 0] = k_loc[6, 6] = EA_L
         k_loc[0, 6] = k_loc[6, 0] = -EA_L
         
-        GJ_L = (self.G * self.J) / L
+        GJ_L = (self.G * J) / L
         k_loc[3, 3] = k_loc[9, 9] = GJ_L
         k_loc[3, 9] = k_loc[9, 3] = -GJ_L
         
-        k12_Iz, k6_Iz, k4_Iz, k2_Iz = (12*self.E*self.Iz)/(L**3), (6*self.E*self.Iz)/(L**2), (4*self.E*self.Iz)/L, (2*self.E*self.Iz)/L
+        k12_Iz, k6_Iz, k4_Iz, k2_Iz = (12*self.E*Iz)/(L**3), (6*self.E*Iz)/(L**2), (4*self.E*Iz)/L, (2*self.E*Iz)/L
         k_loc[1, 1] = k_loc[7, 7] = k12_Iz
         k_loc[1, 7] = k_loc[7, 1] = -k12_Iz
         k_loc[1, 5] = k_loc[5, 1] = k_loc[1, 11] = k_loc[11, 1] = k6_Iz
@@ -73,7 +62,7 @@ class MotorCalculo3D:
         k_loc[5, 5] = k_loc[11, 11] = k4_Iz
         k_loc[5, 11] = k_loc[11, 5] = k2_Iz
 
-        k12_Iy, k6_Iy, k4_Iy, k2_Iy = (12*self.E*self.Iy)/(L**3), (6*self.E*self.Iy)/(L**2), (4*self.E*self.Iy)/L, (2*self.E*self.Iy)/L
+        k12_Iy, k6_Iy, k4_Iy, k2_Iy = (12*self.E*Iy)/(L**3), (6*self.E*Iy)/(L**2), (4*self.E*Iy)/L, (2*self.E*Iy)/L
         k_loc[2, 2] = k_loc[8, 8] = k12_Iy
         k_loc[2, 8] = k_loc[8, 2] = -k12_Iy
         k_loc[2, 4] = k_loc[4, 2] = k_loc[2, 10] = k_loc[10, 2] = -k6_Iy
@@ -92,17 +81,17 @@ class MotorCalculo3D:
         self.cargas_nodais = np.zeros(num_dofs)
         self.fef_local = {}
 
-        for i, (n1, n2) in enumerate(self.barras):
+        for i, barra in enumerate(self.barras):
+            n1, n2 = barra['n1'], barra['n2']
             z1, z2 = self.nos[n1][2], self.nos[n2][2]
-            # Aplica carga distribuída nas barras superiores (cobertura)
-            if min(z1, z2) >= 0.1:
+            # Aplica carga distribuída apenas nas barras horizontais superiores
+            if min(z1, z2) >= 0.1 and barra['grupo'] not in ["Pilares Metálicos", "Montantes", "Diagonais"]:
                 x1, y1, _ = self.nos[n1]
                 x2, y2, _ = self.nos[n2]
                 L = np.sqrt((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2)
                 if L == 0: continue
                 
                 T, R = self._get_T(x2-x1, y2-y1, z2-z1, L)
-                
                 q_glob = np.array([0, 0, -q_linear])
                 q_loc = R @ q_glob
                 qx, qy, qz = q_loc
@@ -126,9 +115,10 @@ class MotorCalculo3D:
             K_global = np.zeros((num_dofs, num_dofs))
             k_locs, Ts = {}, {}
             
-            for i, (n1, n2) in enumerate(self.barras):
-                k_glob, k_loc, T, _, _ = self._matriz_elemento_3d(n1, n2)
+            for i, barra in enumerate(self.barras):
+                k_glob, k_loc, T, _, _ = self._matriz_elemento_3d(barra)
                 k_locs[i], Ts[i] = k_loc, T
+                n1, n2 = barra['n1'], barra['n2']
                 dofs = [n1*6 + d for d in range(6)] + [n2*6 + d for d in range(6)]
                 for r in range(12):
                     for c in range(12):
@@ -136,7 +126,7 @@ class MotorCalculo3D:
 
             dofs_livres = [d for d in range(num_dofs) if d not in self.apoios]
             
-            # Mola de estabilização numérica (evita matriz singular sem alterar resultados)
+            # Estabilização leve para matrizes singulares
             max_k = np.max(np.diag(K_global)) if len(K_global) > 0 else 1.0
             for d in dofs_livres:
                 if K_global[d, d] < 1e-6 * max_k:
@@ -153,10 +143,16 @@ class MotorCalculo3D:
             U_completo = np.zeros(num_dofs)
             U_completo[dofs_livres] = U_livre
 
-            n_max, v_max, m_max = 0.0, 0.0, 0.0
             esforcos = []
+            esforcos_grupos = {}
+            for b in self.barras:
+                if b['grupo'] not in esforcos_grupos:
+                    esforcos_grupos[b['grupo']] = {"n_max": 0.0, "v_max": 0.0, "m_max": 0.0, "d_max": 0.0}
 
-            for i, (n1, n2) in enumerate(self.barras):
+            for i, barra in enumerate(self.barras):
+                n1, n2 = barra['n1'], barra['n2']
+                grp = barra['grupo']
+                
                 dofs = [n1*6 + d for d in range(6)] + [n2*6 + d for d in range(6)]
                 u_elem = U_completo[dofs]
                 
@@ -176,9 +172,18 @@ class MotorCalculo3D:
                     "My": (My1, My2), "Mz": (Mz1, Mz2)
                 })
 
-                n_max = max(n_max, abs(N1), abs(N2))
-                v_max = max(v_max, abs(Vy1), abs(Vy2), abs(Vz1), abs(Vz2))
-                m_max = max(m_max, abs(My1), abs(My2), abs(Mz1), abs(Mz2))
+                n_max = max(abs(N1), abs(N2))
+                v_max = max(abs(Vy1), abs(Vy2), abs(Vz1), abs(Vz2))
+                m_max = max(abs(My1), abs(My2), abs(Mz1), abs(Mz2))
+                
+                d_no1 = np.linalg.norm(U_completo[n1*6:n1*6+3]) * 1000.0
+                d_no2 = np.linalg.norm(U_completo[n2*6:n2*6+3]) * 1000.0
+                d_max = max(d_no1, d_no2)
+
+                esforcos_grupos[grp]["n_max"] = max(esforcos_grupos[grp]["n_max"], n_max)
+                esforcos_grupos[grp]["v_max"] = max(esforcos_grupos[grp]["v_max"], v_max)
+                esforcos_grupos[grp]["m_max"] = max(esforcos_grupos[grp]["m_max"], m_max)
+                esforcos_grupos[grp]["d_max"] = max(esforcos_grupos[grp]["d_max"], d_max)
 
             F_total = K_global @ U_completo
             reacoes = {}
@@ -188,13 +193,11 @@ class MotorCalculo3D:
                 if no not in reacoes: reacoes[no] = [0.0]*6
                 reacoes[no][eixo] = float(F_total[dof] - self.cargas_nodais[dof])
 
-            desloc_max_mm = float(np.max(np.abs(U_completo)) * 1000.0)
-
             return {
                 "sucesso": True, "num_nos": len(self.nos), "num_barras": len(self.barras),
-                "n_max_kn": float(n_max), "v_max_kn": float(v_max), "m_max_knm": float(m_max),
-                "desloc_max_mm": desloc_max_mm,
-                "esforcos": esforcos, "reacoes": reacoes, "nos": self.nos, "barras": self.barras
+                "esforcos": esforcos, "reacoes": reacoes, "nos": self.nos, 
+                "barras": [(b['n1'], b['n2']) for b in self.barras],
+                "esforcos_grupos": esforcos_grupos
             }
         except Exception as e:
             return {"sucesso": False, "erro": str(e)}
