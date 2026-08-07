@@ -2,6 +2,13 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 from datetime import datetime
+
+# Tratamento para garantir que o app não quebre se o fpdf ainda não estiver instalado
+try:
+    from fpdf import FPDF
+except ImportError:
+    FPDF = None
+
 from modules.solver import MotorCalculo3D
 from modules.checker import VerificadorNBR8800, CATALOGO_CHAPA_DOBRADA, CATALOGO_COMPLETO, PROPRIEDADES_ACO
 
@@ -73,8 +80,13 @@ def gerar_relatorio_txt(dados, res_analise, resultados_comp, tudo_aprovado):
     data_atual = datetime.now().strftime("%d/%m/%Y às %H:%M")
     status_global = "APROVADA" if tudo_aprovado else "REPROVADA (Requer revisão de perfis)"
     
+    aco = PROPRIEDADES_ACO[dados['tipo_aco']]
+    fy_mpa = aco['fy']
+    fy_kncm2 = fy_mpa / 10.0
+    gamma_a1 = 1.10
+    
     relatorio = f"""=========================================================
-      MEMÓRIA DE CÁLCULO ESTRUTURAL - DIMENSIONADOR 3D
+      MEMÓRIA DE CÁLCULO ESTRUTURAL DETALHADA
 =========================================================
 Data de Geração: {data_atual}
 Status Global da Estrutura: {status_global}
@@ -100,19 +112,88 @@ Status Global da Estrutura: {status_global}
 - Sobrecarga Normativa de Uso (Q): {dados['q_sobre']:.2f} kN/m²
 >> CARGA DE PROJETO COMBINADA (ELU): {dados['q_elu']:.2f} kN/m²
 
-3. ESFORÇOS SOLICITANTES MÁXIMOS
+3. ESFORÇOS SOLICITANTES MÁXIMOS GLOBAIS (MATRICIAL 3D)
 ---------------------------------------------------------
 - Esforço Normal Máximo (N_sd): {res_analise['n_max_kn']:.2f} kN
 - Esforço Cortante Máximo (V_sd): {res_analise['v_max_kn']:.2f} kN
 - Momento Fletor Máximo (M_sd): {res_analise['m_max_knm']:.2f} kNm
 - Deslocamento Máximo (Flecha ELS): {res_analise['desloc_max_mm']:.2f} mm
 
-4. VERIFICAÇÃO NBR 8800
----------------------------------------------------------\n"""
+4. VERIFICAÇÃO DETALHADA POR COMPONENTE (NBR 8800)
+---------------------------------------------------------
+Propriedades do Material: {dados['tipo_aco']} (fy = {fy_mpa} MPa = {fy_kncm2:.1f} kN/cm²)
+Coeficiente de Minoração da Resistência (γ_a1) = {gamma_a1}
+
+"""
     for v in resultados_comp:
+        perf = CATALOGO_COMPLETO[v['perfil']]
+        A = perf['A']
+        Wx = perf['Wx']
+        d = perf['d'] / 10.0
+        tw = perf['tw'] / 10.0
+        Av = d * tw
         status_comp = "APROVADO" if v['aprovado'] else "REPROVADO"
-        relatorio += f"[{v['componente'].upper()}]\n  Perfil: {v['perfil']} ({v['familia']})\n  Status: {status_comp} (Taxa: {v['taxa_maxima']:.1f}%)\n\n"
+
+        relatorio += f"[{v['componente'].upper()}]\n"
+        relatorio += f"  Perfil Selecionado: {v['perfil']} ({v['familia']})\n"
+        relatorio += f"  Fator de Distribuição de Esforços no Modelo: {v['fator']:.2f}\n\n"
+        
+        relatorio += f"  A. ESFORÇOS ATUANTES DE CÁLCULO (Sd)\n"
+        relatorio += f"     N_Sd = {v['N_sd']:.2f} kN\n"
+        relatorio += f"     V_Sd = {v['V_sd']:.2f} kN\n"
+        relatorio += f"     M_Sd = {v['M_sd']:.2f} kNm\n\n"
+
+        relatorio += f"  B. PROPRIEDADES GEOMÉTRICAS DA SEÇÃO\n"
+        relatorio += f"     Área Bruta (A) = {A:.2f} cm²\n"
+        relatorio += f"     Módulo Resistente Elástico (Wx) = {Wx:.2f} cm³\n"
+        relatorio += f"     Altura (d) = {d:.2f} cm | Espessura da Alma (tw) = {tw:.2f} cm\n"
+        relatorio += f"     Área de Cisalhamento Efetiva (Av = d * tw) = {Av:.2f} cm²\n\n"
+
+        relatorio += f"  C. VERIFICAÇÃO À TRAÇÃO/COMPRESSÃO (N_Rd)\n"
+        relatorio += f"     Fórmula: N_Rd = (A * fy) / γ_a1\n"
+        relatorio += f"     Cálculo: N_Rd = ({A:.2f} * {fy_kncm2:.1f}) / {gamma_a1} = {v['N_rd']:.2f} kN\n"
+        relatorio += f"     Checagem: {v['N_sd']:.2f} kN / {v['N_rd']:.2f} kN = {v['ratio_N']:.1f}%\n\n"
+
+        relatorio += f"  D. VERIFICAÇÃO AO CISALHAMENTO (V_Rd)\n"
+        relatorio += f"     Fórmula: V_Rd = (0.60 * Av * fy) / γ_a1\n"
+        relatorio += f"     Cálculo: V_Rd = (0.60 * {Av:.2f} * {fy_kncm2:.1f}) / {gamma_a1} = {v['V_rd']:.2f} kN\n"
+        relatorio += f"     Checagem: {v['V_sd']:.2f} kN / {v['V_rd']:.2f} kN = {v['ratio_V']:.1f}%\n\n"
+
+        relatorio += f"  E. VERIFICAÇÃO À FLEXÃO (M_Rd)\n"
+        relatorio += f"     Fórmula: M_Rd = (Wx * fy) / γ_a1\n"
+        relatorio += f"     Cálculo: M_Rd = ({Wx:.2f} * {fy_kncm2:.1f}) / (100 * {gamma_a1}) = {v['M_rd']:.2f} kNm\n"
+        relatorio += f"     Checagem: {v['M_sd']:.2f} kNm / {v['M_rd']:.2f} kNm = {v['ratio_M']:.1f}%\n\n"
+
+        relatorio += f"  F. VERIFICAÇÃO DE DEFORMAÇÃO ELS (FLECHA)\n"
+        relatorio += f"     Fórmula: δ_lim = Vão_X / 250\n"
+        relatorio += f"     Cálculo: δ_lim = ({dados['vao_x']:.2f} * 1000) / 250 = {v['delta_lim_mm']:.1f} mm\n"
+        relatorio += f"     Checagem: {res_analise['desloc_max_mm']:.2f} mm / {v['delta_lim_mm']:.1f} mm = {v['ratio_delta']:.1f}%\n\n"
+
+        relatorio += f"  >> STATUS DA PEÇA: {status_comp} (Taxa Máxima: {v['taxa_maxima']:.1f}%)\n"
+        relatorio += ".........................................................\n\n"
+
     return relatorio
+
+def gerar_relatorio_pdf(texto_memoria):
+    """Converte o texto estruturado para PDF nativo usando FPDF"""
+    if FPDF is None:
+        return None
+        
+    pdf = FPDF()
+    pdf.add_page()
+    # Usando Courier (monoespaçada) para manter o alinhamento das fórmulas matemáticas
+    pdf.set_font("Courier", size=9) 
+    
+    for linha in texto_memoria.split('\n'):
+        # Limpeza para suportar acentuação no padrão ISO-8859-1 (latin-1) do FPDF básico
+        linha_limpa = linha.encode('latin-1', 'replace').decode('latin-1')
+        pdf.multi_cell(0, 5, txt=linha_limpa)
+        
+    out = pdf.output(dest='S')
+    # Compatibilidade com fpdf (retorna string) e fpdf2 (retorna bytes)
+    if isinstance(out, str):
+        return out.encode('latin-1')
+    return bytes(out)
 
 def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
@@ -255,13 +336,11 @@ def main():
                 all_x.append(pt[0]); all_y.append(pt[1]); all_z.append(pt[2])
             return dict_nos[pt]
 
-        # 1. Vigotas Transversais
         for y_v in y_vigotas:
             n_esq = add_no(0, y_v, altura_z)
             n_dir = add_no(vao_x, y_v, altura_z)
             edges.append((n_esq, n_dir)) 
 
-        # 2. Vigas Principais
         for i in range(len(y_vigotas) - 1):
             n1_esq = add_no(0, y_vigotas[i], altura_z)
             n2_esq = add_no(0, y_vigotas[i+1], altura_z)
@@ -271,7 +350,6 @@ def main():
             n2_dir = add_no(vao_x, y_vigotas[i+1], altura_z)
             edges.append((n1_dir, n2_dir))
 
-        # 3. Pilares (condicionados)
         if has_pillar:
             for i_y, y_p in enumerate(y_coords):
                 if distribuicao_pilares == "Apenas nos 4 cantos extremos" and i_y != 0 and i_y != (len(y_coords) - 1):
@@ -424,6 +502,10 @@ def main():
             for nome_comp, perfil, fator in componentes:
                 v = verificador.verificar_elemento(perfil, res["n_max_kn"], res["v_max_kn"], res["m_max_knm"], res["desloc_max_mm"], vao_x, fator)
                 v["componente"] = nome_comp
+                v["fator"] = fator
+                v["N_sd"] = abs(res["n_max_kn"]) * fator
+                v["V_sd"] = abs(res["v_max_kn"]) * fator
+                v["M_sd"] = abs(res["m_max_knm"]) * fator
                 resultados_comp.append(v)
                 if not v["aprovado"]: tudo_aprovado = False
 
@@ -442,7 +524,17 @@ def main():
                 "q_elu": q_elu, "tipo_aco": tipo_aco
             }
             texto_memoria = gerar_relatorio_txt(dados_relatorio, res, resultados_comp, tudo_aprovado)
-            st.download_button(label="📥 Baixar Memória de Cálculo (.txt)", data=texto_memoria, file_name="Memoria_Calculo.txt", mime="text/plain", type="primary")
+            
+            # --- BOTÕES DE DOWNLOAD (TXT E PDF) LADO A LADO ---
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.download_button(label="📄 Baixar Memória (.txt)", data=texto_memoria, file_name="Memoria_Calculo.txt", mime="text/plain", use_container_width=True)
+            with col_d2:
+                if FPDF is not None:
+                    pdf_bytes = gerar_relatorio_pdf(texto_memoria)
+                    st.download_button(label="📥 Baixar Memória em PDF (.pdf)", data=pdf_bytes, file_name="Memoria_Calculo_Metalica.pdf", mime="application/pdf", type="primary", use_container_width=True)
+                else:
+                    st.error("⚠️ Para gerar o PDF, instale a biblioteca 'fpdf' (Adicione fpdf no requirements.txt)")
             st.markdown("---")
 
             for v in resultados_comp:
