@@ -3,7 +3,6 @@ import plotly.graph_objects as go
 import numpy as np
 from datetime import datetime
 
-# Tratamento para garantir que o app não quebre se o fpdf ainda não estiver instalado
 try:
     from fpdf import FPDF
 except ImportError:
@@ -112,7 +111,14 @@ Status Global da Estrutura: {status_global}
 - Sobrecarga Normativa de Uso (Q): {dados['q_sobre']:.2f} kN/m²
 >> CARGA DE PROJETO COMBINADA (ELU): {dados['q_elu']:.2f} kN/m²
 
-3. VERIFICAÇÃO DETALHADA POR COMPONENTE (NBR 8800)
+3. ESFORÇOS SOLICITANTES MÁXIMOS GLOBAIS (MATRICIAL 3D)
+---------------------------------------------------------
+- Esforço Normal Máximo (N_sd): {res_analise.get('n_max_kn', 0.0):.2f} kN
+- Esforço Cortante Máximo (V_sd): {res_analise.get('v_max_kn', 0.0):.2f} kN
+- Momento Fletor Máximo (M_sd): {res_analise.get('m_max_knm', 0.0):.2f} kNm
+- Deslocamento Máximo (Flecha ELS): {res_analise.get('desloc_max_mm', 0.0):.2f} mm
+
+4. VERIFICAÇÃO DETALHADA POR COMPONENTE (NBR 8800)
 ---------------------------------------------------------
 Propriedades do Material: {dados['tipo_aco']} (fy = {fy_mpa} MPa = {fy_kncm2:.1f} kN/cm²)
 Coeficiente de Minoração da Resistência (γ_a1) = {gamma_a1}
@@ -200,7 +206,6 @@ def main():
     if tipo_pilar != "Sem Pilar":
         distribuicao_pilares = st.sidebar.selectbox("Distribuição de Pilares", ["Em todos os pórticos", "Apenas nos 4 cantos extremos"])
 
-    # Variáveis com valores padrão para evitar NameError
     n_paineis = 6
     espacamento_vigota = 1.0
     forma_cobertura = "2 Águas"
@@ -271,7 +276,7 @@ def main():
                 "Depósito Pesado (5.00 kN/m²)", 
                 "Passarela - Manutenção/Sem Público (3.00 kN/m²)", 
                 "Passarela - Acesso Público (5.00 kN/m²)",
-                "Academias / Ginástica (3.00 kN/m²)" 
+                "Academias / Ginástica (3.00 kN/m²)"
             ]
         )
         peso_piso = float(tipo_piso.split("(")[1].split(" ")[0])
@@ -322,7 +327,6 @@ def main():
         if has_pillar:
             for i_y, y_p in enumerate(y_coords):
                 if distribuicao_pilares == "Apenas nos 4 cantos extremos" and i_y != 0 and i_y != (len(y_coords) - 1): continue
-                # Modificado para sempre adicionar pilares à visualização, mesmo se de concreto
                 edges_raw.append({"n1": add_no(0, y_p, 0), "n2": add_no(0, y_p, altura_z), "grupo": "Pilares Metálicos" if tipo_pilar == "Pilar Metálico" else "Pilares Concreto"})
                 edges_raw.append({"n1": add_no(vao_x, y_p, 0), "n2": add_no(vao_x, y_p, altura_z), "grupo": "Pilares Metálicos" if tipo_pilar == "Pilar Metálico" else "Pilares Concreto"})
 
@@ -347,7 +351,6 @@ def main():
             edges_raw.append({"n1": add_no(0, y_coords[i], altura_z), "n2": add_no(0, y_coords[i+1], altura_z), "grupo": "Terças de Cobertura"})
             edges_raw.append({"n1": add_no(vao_x, y_coords[i], altura_z), "n2": add_no(vao_x, y_coords[i+1], altura_z), "grupo": "Terças de Cobertura"})
 
-    # ATRIBUIÇÃO FÍSICA PARA MATRIZ
     barras_prontas = []
     barras_visualizacao = []
     
@@ -356,7 +359,6 @@ def main():
         barras_visualizacao.append({"n1": edge["n1"], "n2": edge["n2"], "grupo": grp})
         
         nome_perf = mapa_perfis.get(grp)
-        # Pilares de concreto não entram na análise do solver metálico, mas devem ser visualizados
         if nome_perf is None: continue 
         
         props = obter_propriedades(nome_perf)
@@ -367,12 +369,10 @@ def main():
 
     with tab1:
         fig = go.Figure()
-        # Usa barras_visualizacao para desenhar todos os elementos, incluindo concreto
         for b in barras_visualizacao:
             x1, y1, z1 = all_x[b["n1"]], all_y[b["n1"]], all_z[b["n1"]]
             x2, y2, z2 = all_x[b["n2"]], all_y[b["n2"]], all_z[b["n2"]]
             
-            # Cor diferente para pilar de concreto
             line_color = 'gray' if b["grupo"] == "Pilares Concreto" else 'blue'
             line_width = 6 if b["grupo"] == "Pilares Concreto" else 4
             
@@ -409,9 +409,8 @@ def main():
             resultados_comp = []
             tudo_aprovado = True
 
-            for grupo, esf_grp in res["esforcos_grupos"].items():
+            for grupo, esf_grp in res.get("esforcos_grupos", {}).items():
                 nome_perfil = mapa_perfis.get(grupo)
-                # Pula a verificação metálica se for Pilar de Concreto
                 if nome_perfil is None: continue 
                 
                 v = verificador.verificar_elemento(
@@ -430,37 +429,38 @@ def main():
                 if not v["aprovado"]: tudo_aprovado = False
 
             if tudo_aprovado: st.success("### 🎉 TODOS OS PERFIS FORAM APROVADOS!")
-            else: st.error("### ❌ HÁ PERFIS REPROVADOS!")
+            elif len(resultados_comp) > 0: st.error("### ❌ HÁ PERFIS REPROVADOS!")
             
-            st.markdown("---")
-            dados_r = {
-                "sistema_principal": sistema_principal, "tipo_pilar": tipo_pilar, 
-                "distribuicao_pilares": distribuicao_pilares, "vao_x": vao_x, "comp_y": comp_y, 
-                "altura_z": altura_z, "espacamento": espacamento, "espacamento_vigota": espacamento_vigota,
-                "g_total": g_total, "q_sobre": q_sobre, "q_elu": q_elu, "tipo_aco": tipo_aco, 
-                "q_vento_liquido": q_vento_liquido, "tipo_piso": tipo_piso if sistema_principal == "Mezanino / Passarela Metálica" else "N/A"
-            }
-            texto_memoria = gerar_relatorio_txt(dados_r, res, resultados_comp, tudo_aprovado)
-            
-            col_d1, col_d2 = st.columns(2)
-            with col_d1: st.download_button("📄 Baixar TXT", data=texto_memoria, file_name="Calculo.txt", use_container_width=True)
-            with col_d2:
-                if FPDF is not None:
-                    st.download_button("📥 Baixar PDF", data=gerar_relatorio_pdf(texto_memoria), file_name="Calculo_Detalhado.pdf", mime="application/pdf", type="primary", use_container_width=True)
-                else:
-                    st.error("⚠️ Instale a biblioteca 'fpdf' (Adicione fpdf no requirements.txt) para gerar o PDF.")
-
-            st.markdown("---")
-            for v in resultados_comp:
-                st.write(f"#### 🔹 {v['componente']} — `{v['perfil']}`")
-                c1, c2, c3, c4, c5 = st.columns(5)
-                c1.metric("Status", "✅ Ok" if v['aprovado'] else "❌ Reprovado")
-                c2.metric("Taxa", f"{v['taxa_maxima']:.1f}%")
-                c3.metric("Momento (Msd/Mrd)", f"{v['ratio_M']:.1f}%")
-                c4.metric("Normal (Nsd/Nrd)", f"{v['ratio_N']:.1f}%")
-                c5.metric("Flecha", f"{v['ratio_delta']:.1f}%")
-                st.progress(min(max(int(v['taxa_maxima']), 0), 100))
+            if len(resultados_comp) > 0:
                 st.markdown("---")
+                dados_r = {
+                    "sistema_principal": sistema_principal, "tipo_pilar": tipo_pilar, 
+                    "distribuicao_pilares": distribuicao_pilares, "vao_x": vao_x, "comp_y": comp_y, 
+                    "altura_z": altura_z, "espacamento": espacamento, "espacamento_vigota": espacamento_vigota,
+                    "g_total": g_total, "q_sobre": q_sobre, "q_elu": q_elu, "tipo_aco": tipo_aco, 
+                    "q_vento_liquido": q_vento_liquido, "tipo_piso": tipo_piso if sistema_principal == "Mezanino / Passarela Metálica" else "N/A"
+                }
+                texto_memoria = gerar_relatorio_txt(dados_r, res, resultados_comp, tudo_aprovado)
+                
+                col_d1, col_d2 = st.columns(2)
+                with col_d1: st.download_button("📄 Baixar TXT", data=texto_memoria, file_name="Calculo.txt", use_container_width=True)
+                with col_d2:
+                    if FPDF is not None:
+                        st.download_button("📥 Baixar PDF", data=gerar_relatorio_pdf(texto_memoria), file_name="Calculo_Detalhado.pdf", mime="application/pdf", type="primary", use_container_width=True)
+                    else:
+                        st.error("⚠️ Instale a biblioteca 'fpdf' (Adicione fpdf no requirements.txt) para gerar o PDF.")
+
+                st.markdown("---")
+                for v in resultados_comp:
+                    st.write(f"#### 🔹 {v['componente']} — `{v['perfil']}`")
+                    c1, c2, c3, c4, c5 = st.columns(5)
+                    c1.metric("Status", "✅ Ok" if v['aprovado'] else "❌ Reprovado")
+                    c2.metric("Taxa", f"{v['taxa_maxima']:.1f}%")
+                    c3.metric("Momento (Msd/Mrd)", f"{v['ratio_M']:.1f}%")
+                    c4.metric("Normal (Nsd/Nrd)", f"{v['ratio_N']:.1f}%")
+                    c5.metric("Flecha", f"{v['ratio_delta']:.1f}%")
+                    st.progress(min(max(int(v['taxa_maxima']), 0), 100))
+                    st.markdown("---")
 
     with tab5:
         if st.session_state.res_analise:
