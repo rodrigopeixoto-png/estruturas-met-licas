@@ -20,15 +20,24 @@ def desenhar_diagrama(res, tipo_diagrama):
     for n1, n2 in barras:
         x1, y1, z1 = nos[n1]
         x2, y2, z2 = nos[n2]
-        fig.add_trace(go.Scatter3d(x=[x1, x2], y=[y1, y2], z=[z1, z2], mode='lines', line=dict(color='lightgrey', width=2), showlegend=False))
+        fig.add_trace(go.Scatter3d(
+            x=[x1, x2], y=[y1, y2], z=[z1, z2],
+            mode='lines', line=dict(color='lightgrey', width=2), showlegend=False
+        ))
         
     if tipo_diagrama == "Reações de Apoio":
         rx, ry, rz, texts = [], [], [], []
         for no_idx, reac in res["reacoes"].items():
             x, y, z = nos[no_idx]
+            Fx, Fy, Fz = reac[0], reac[1], reac[2]
             rx.append(x); ry.append(y); rz.append(z)
-            texts.append(f"Fz: {reac[2]:.1f}kN<br>Fx: {reac[0]:.1f}kN<br>Fy: {reac[1]:.1f}kN")
-        fig.add_trace(go.Scatter3d(x=rx, y=ry, z=rz, mode='markers+text', marker=dict(size=8, color='purple', symbol='diamond'), text=texts, textposition="top center", textfont=dict(size=11, color='purple'), showlegend=False))
+            texts.append(f"Fz: {Fz:.1f}kN<br>Fx: {Fx:.1f}kN<br>Fy: {Fy:.1f}kN")
+        
+        fig.add_trace(go.Scatter3d(
+            x=rx, y=ry, z=rz, mode='markers+text',
+            marker=dict(size=8, color='purple', symbol='diamond'),
+            text=texts, textposition="top center", textfont=dict(size=11, color='purple'), showlegend=False
+        ))
     else:
         max_val = 1e-5
         for esf in esforcos:
@@ -44,16 +53,24 @@ def desenhar_diagrama(res, tipo_diagrama):
             L = np.sqrt(dx**2 + dy**2 + dz**2)
             if L == 0: continue
             
-            if "Normal" in tipo_diagrama: cor = 'royalblue' if (esf["N"][0]+esf["N"][1]) > 0 else 'crimson'
-            elif "Cortante" in tipo_diagrama: cor = 'seagreen'
-            else: cor = 'darkorange'
+            if "Normal" in tipo_diagrama:
+                v1, v2 = esf["N"]
+                cor = 'royalblue' if (v1+v2) > 0 else 'crimson'
+            elif "Cortante" in tipo_diagrama:
+                v1, v2 = esf["Vz"]
+                cor = 'seagreen'
+            else:
+                v1, v2 = esf["My"]
+                cor = 'darkorange'
                 
-            v1, v2 = (esf["N"] if "Normal" in tipo_diagrama else (esf["Vz"] if "Cortante" in tipo_diagrama else esf["My"]))
             nx, ny, nz = (1, 0, 0) if abs(dz)/L > 0.95 else (0, 0, 1)
             ox1, oy1, oz1 = x1 + nx*v1*escala, y1 + ny*v1*escala, z1 + nz*v1*escala
             ox2, oy2, oz2 = x2 + nx*v2*escala, y2 + ny*v2*escala, z2 + nz*v2*escala
             
-            fig.add_trace(go.Scatter3d(x=[x1, ox1, ox2, x2], y=[y1, oy1, oy2, y2], z=[z1, oz1, oz2, z2], mode='lines', line=dict(color=cor, width=3), showlegend=False))
+            fig.add_trace(go.Scatter3d(
+                x=[x1, ox1, ox2, x2], y=[y1, oy1, oy2, y2], z=[z1, oz1, oz2, z2],
+                mode='lines', line=dict(color=cor, width=3), showlegend=False
+            ))
 
     fig.update_layout(scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=600)
     return fig
@@ -77,9 +94,11 @@ Status Global da Estrutura: {status_global}
 ---------------------------------------------------------
 - Sistema Principal: {dados['sistema_principal']}
 - Tipo de Pilar: {dados['tipo_pilar']}
+- Distribuição dos Pilares: {dados.get('distribuicao_pilares', 'N/A')}
 - Vão Transversal (X): {dados['vao_x']:.2f} m
 - Comprimento Longitudinal (Y): {dados['comp_y']:.2f} m
 - Altura (Z): {dados['altura_z']:.2f} m
+- Espaçamento entre Pórticos Principais: {dados['espacamento']:.2f} m
 """
     if dados['sistema_principal'] == "Mezanino / Passarela Metálica":
         relatorio += f"- Espaçamento entre Vigotas Transversais: {dados['espacamento_vigota']:.2f} m\n"
@@ -92,7 +111,7 @@ Status Global da Estrutura: {status_global}
 - Sobrecarga Normativa de Uso (Q): {dados['q_sobre']:.2f} kN/m²
 >> CARGA DE PROJETO COMBINADA (ELU): {dados['q_elu']:.2f} kN/m²
 
-3. ESFORÇOS SOLICITANTES MÁXIMOS GLOBAIS (MATRICIAL 3D)
+3. ESFORÇOS SOLICITANTES MÁXIMOS GLOBAIS
 ---------------------------------------------------------
 - Esforço Normal Máximo (N_sd): {res_analise.get('n_max_kn', 0.0):.2f} kN
 - Esforço Cortante Máximo (V_sd): {res_analise.get('v_max_kn', 0.0):.2f} kN
@@ -101,6 +120,9 @@ Status Global da Estrutura: {status_global}
 
 4. VERIFICAÇÃO DETALHADA POR COMPONENTE (NBR 8800)
 ---------------------------------------------------------
+Propriedades do Material: {dados['tipo_aco']} (fy = {fy_mpa} MPa = {fy_kncm2:.1f} kN/cm²)
+Coeficiente de Minoração (γ_a1) = {gamma_a1}
+
 """
     for v in resultados_comp:
         perf = CATALOGO_COMPLETO[v['perfil']]
@@ -113,7 +135,11 @@ Status Global da Estrutura: {status_global}
 
         relatorio += f"[{v['componente'].upper()}]\n  Perfil Selecionado: {v['perfil']} ({v['familia']})\n"
         relatorio += f"  A. ESFORÇOS ATUANTES MÁXIMOS (Sd)\n     N_Sd = {v['N_sd']:.2f} kN | V_Sd = {v['V_sd']:.2f} kN | M_Sd = {v['M_sd']:.2f} kNm\n\n"
-        relatorio += f"  B. VERIFICAÇÕES DE RESISTÊNCIA E FLECHA\n"
+        relatorio += f"  B. PROPRIEDADES GEOMÉTRICAS DA SEÇÃO\n"
+        relatorio += f"     Área Bruta (A) = {A:.2f} cm²\n"
+        relatorio += f"     Módulo Resistente Elástico (Wx) = {Wx:.2f} cm³\n"
+        relatorio += f"     Altura (d) = {d:.2f} cm | Espessura da Alma (tw) = {tw:.2f} cm\n\n"
+        relatorio += f"  C. VERIFICAÇÕES DE RESISTÊNCIA E FLECHA\n"
         relatorio += f"     Tração/Compressão (N_Rd = {v['N_rd']:.2f} kN): {v['N_sd']:.2f} / {v['N_rd']:.2f} = {v['ratio_N']:.1f}%\n"
         relatorio += f"     Cisalhamento (V_Rd = {v['V_rd']:.2f} kN): {v['V_sd']:.2f} / {v['V_rd']:.2f} = {v['ratio_V']:.1f}%\n"
         relatorio += f"     Momento Fletor (M_Rd = {v['M_rd']:.2f} kNm): {v['M_sd']:.2f} / {v['M_rd']:.2f} = {v['ratio_M']:.1f}%\n"
@@ -133,7 +159,13 @@ def gerar_relatorio_pdf(texto_memoria):
 
 def obter_propriedades(nome_perfil):
     p = CATALOGO_COMPLETO[nome_perfil]
-    return {"A": p["A"] * 1e-4, "Iy": p["Iy"] * 1e-8, "Iz": p["Ix"] * 1e-8, "J": (p["Iy"] * 1e-8) / 2.0}
+    # CORREÇÃO FÍSICA: Para flexão vertical, a inércia relevante na matriz 3D é o Ix do catálogo.
+    return {
+        "A": p["A"] * 1e-4,          
+        "Iy": p["Ix"] * 1e-8,  # Eixo Forte assume a flexão da gravidade
+        "Iz": p["Iy"] * 1e-8,  # Eixo Fraco assume a flexão lateral
+        "J": (p["Iy"] * 1e-8) / 2.0  
+    }
 
 def main():
     st.title("🏗️ Dimensionamento de Estruturas Metálicas 3D")
@@ -207,7 +239,7 @@ def main():
             [
                 "Escritórios / Leve (2.50 kN/m²)", "Residencial (1.50 kN/m²)", "Comercial / Lojas (3.00 kN/m²)", 
                 "Depósito Leve (4.00 kN/m²)", "Depósito Pesado (5.00 kN/m²)", "Passarela - Manutenção/Sem Público (3.00 kN/m²)", 
-                "Passarela - Acesso Público (5.00 kN/m²)", "Academias / Ginástica (3.00 kN/m²)" 
+                "Passarela - Acesso Público (5.00 kN/m²)", "Academias / Ginástica (5.00 kN/m²)" 
             ]
         )
         peso_piso = float(tipo_piso.split("(")[1].split(" ")[0])
