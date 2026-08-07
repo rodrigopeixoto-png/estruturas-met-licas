@@ -177,9 +177,21 @@ class MotorCalculo3D:
                 v_max = max(abs(Vy1), abs(Vy2), abs(Vz1), abs(Vz2))
                 m_max = max(abs(My1), abs(My2), abs(Mz1), abs(Mz2))
                 
+                # Deslocamento local interno da barra sob carga distribuída (Fórmula 5qL^4 / 384EI)
+                d_bow = 0.0
+                if i in self.fef_local:
+                    L = np.sqrt((self.nos[n2][0]-self.nos[n1][0])**2 + (self.nos[n2][1]-self.nos[n1][1])**2 + (self.nos[n2][2]-self.nos[n1][2])**2)
+                    if L > 0:
+                        # Recupera a carga linear a partir do momento de engastamento perfeito
+                        q_z_local = (self.fef_local[i][4] * 12.0) / (L**2)
+                        d_bow = abs((5.0 * q_z_local * (L**4)) / (384.0 * self.E * barra['Iy'])) * 1000.0
+                
+                # Deslocamento absoluto dos nós extremos
                 d_no1 = np.linalg.norm(U_completo[n1*6:n1*6+3]) * 1000.0
                 d_no2 = np.linalg.norm(U_completo[n2*6:n2*6+3]) * 1000.0
-                d_max = max(d_no1, d_no2)
+                
+                # A flecha real final é o movimento dos apoios MAIS a curvatura interna
+                d_max = max(d_no1, d_no2) + d_bow
 
                 esforcos_grupos[grp]["n_max"] = max(esforcos_grupos[grp]["n_max"], n_max)
                 esforcos_grupos[grp]["v_max"] = max(esforcos_grupos[grp]["v_max"], v_max)
