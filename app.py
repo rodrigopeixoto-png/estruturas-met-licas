@@ -83,10 +83,11 @@ Status Global da Estrutura: {status_global}
 ---------------------------------------------------------
 - Sistema Principal: {dados['sistema_principal']}
 - Tipo de Pilar: {dados['tipo_pilar']}
+- Distribuição dos Pilares: {dados['distribuicao_pilares']}
 - Vão Transversal (X): {dados['vao_x']:.2f} m
 - Comprimento Longitudinal (Y): {dados['comp_y']:.2f} m
-- Altura do Mezanino (Z): {dados['altura_z']:.2f} m
-- Espaçamento entre Vigas Principais: {dados['espacamento']:.2f} m
+- Altura (Z): {dados['altura_z']:.2f} m
+- Espaçamento entre Pórticos Principais: {dados['espacamento']:.2f} m
 """
     if dados['sistema_principal'] == "Mezanino Metálico":
         relatorio += f"- Espaçamento entre Vigotas Transversais: {dados['espacamento_vigota']:.2f} m\n"
@@ -131,6 +132,13 @@ def main():
         "Tipo de Pilar/Suporte", 
         ["Pilar Metálico", "Pilar de Concreto Armado (Apoio Rígido)", "Sem Pilar (Apenas Estrutura Superior)"]
     )
+    
+    distribuicao_pilares = "Em todos os pórticos"
+    if tipo_pilar != "Sem Pilar (Apenas Estrutura Superior)":
+        distribuicao_pilares = st.sidebar.selectbox(
+            "Distribuição de Pilares", 
+            ["Em todos os pórticos", "Apenas nos 4 cantos extremos"]
+        )
 
     forma_cobertura = "Não se aplica"
     n_paineis = 6
@@ -161,7 +169,7 @@ def main():
     vao_x = st.sidebar.number_input("Vão Transversal (X) [m]", min_value=2.0, max_value=60.0, value=15.0 if sistema_principal != "Mezanino Metálico" else 6.0, step=0.5)
     comp_y = st.sidebar.number_input("Comprimento Longitudinal (Y) [m]", min_value=2.0, max_value=120.0, value=30.0 if sistema_principal != "Mezanino Metálico" else 12.0, step=0.5)
     altura_z = st.sidebar.number_input("Pé-direito / Altura (Z) [m]", min_value=0.0 if tipo_pilar == "Sem Pilar (Apenas Estrutura Superior)" else 1.5, max_value=20.0, value=3.0 if sistema_principal == "Mezanino Metálico" else 6.0, step=0.5)
-    espacamento = st.sidebar.number_input("Espaçamento Vigas Principais [m]", min_value=1.5, max_value=12.0, value=3.0 if sistema_principal == "Mezanino Metálico" else 5.0, step=0.5)
+    espacamento = st.sidebar.number_input("Espaçamento entre Pórticos [m]", min_value=1.5, max_value=12.0, value=3.0 if sistema_principal == "Mezanino Metálico" else 5.0, step=0.5)
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("⚙️ Perfis Estruturais (NBR 8800)")
@@ -170,7 +178,6 @@ def main():
     lista_perfis = list(CATALOGO_COMPLETO.keys())
     lista_chapa = list(CATALOGO_CHAPA_DOBRADA.keys())
 
-    # SELEÇÃO ESPECÍFICA DE PERFIS DE ACORDO COM O SISTEMA
     if sistema_principal == "Mezanino Metálico":
         perfil_pilares = st.sidebar.selectbox("Pilares", lista_perfis, index=lista_perfis.index("W 200 x 22.5") if "W 200 x 22.5" in lista_perfis else 0) if tipo_pilar == "Pilar Metálico" else "N/A"
         perfil_viga_principal = st.sidebar.selectbox("Vigas Principais (Mestras)", lista_perfis, index=lista_perfis.index("W 250 x 25.3") if "W 250 x 25.3" in lista_perfis else 0)
@@ -204,10 +211,10 @@ def main():
     # ABAS
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📐 Geometria", "🌪️ Cargas", "⚙️ Análise", "✅ Verificação", "📊 Diagramas", "📦 BIM"])
 
-    # CÁLCULOS DE CARGAS SEPARADOS
+    # CÁLCULOS DE CARGAS
     if sistema_principal == "Mezanino Metálico":
         peso_piso = float(tipo_piso.split("(")[1].split(" ")[0])
-        carga_inst = 0.15 # Instalações e tubulações sob mezanino
+        carga_inst = 0.15
         g_total = peso_piso + carga_inst
         q_sobre = sobrecarga
         v0 = s1 = s2 = s3 = cpe = cpi = c_arrasto = q_vento_liquido = 0.0
@@ -229,7 +236,6 @@ def main():
     has_pillar = (tipo_pilar != "Sem Pilar (Apenas Estrutura Superior)")
 
     if sistema_principal == "Mezanino Metálico":
-        # Disposição das vigotas transversais ao longo de Y
         y_vigotas = np.arange(0, comp_y + espacamento_vigota, espacamento_vigota)
         if y_vigotas[-1] != comp_y: y_vigotas[-1] = comp_y
         
@@ -241,13 +247,13 @@ def main():
                 all_x.append(pt[0]); all_y.append(pt[1]); all_z.append(pt[2])
             return dict_nos[pt]
 
-        # 1. Nós do Plano do Piso (Z = altura_z) para Vigotas
+        # 1. Vigotas Transversais
         for y_v in y_vigotas:
             n_esq = add_no(0, y_v, altura_z)
             n_dir = add_no(vao_x, y_v, altura_z)
-            edges.append((n_esq, n_dir)) # Vigota Transversal
+            edges.append((n_esq, n_dir)) 
 
-        # 2. Vigas Principais Longitudinais (X = 0 e X = vao_x)
+        # 2. Vigas Principais
         for i in range(len(y_vigotas) - 1):
             n1_esq = add_no(0, y_vigotas[i], altura_z)
             n2_esq = add_no(0, y_vigotas[i+1], altura_z)
@@ -257,9 +263,11 @@ def main():
             n2_dir = add_no(vao_x, y_vigotas[i+1], altura_z)
             edges.append((n1_dir, n2_dir))
 
-        # 3. Pilares nos Pórticos Principais (Y = y_coords)
+        # 3. Pilares (condicionados)
         if has_pillar:
-            for y_p in y_coords:
+            for i_y, y_p in enumerate(y_coords):
+                if distribuicao_pilares == "Apenas nos 4 cantos extremos" and i_y != 0 and i_y != (len(y_coords) - 1):
+                    continue
                 n_topo_esq = add_no(0, y_p, altura_z)
                 n_base_esq = add_no(0, y_p, 0)
                 edges.append((n_base_esq, n_topo_esq))
@@ -269,28 +277,32 @@ def main():
                 edges.append((n_base_dir, n_topo_dir))
 
     else:
-        # LÓGICA DE COBERTURA (PORTICO, TRELIÇA, ARCO)
+        # LÓGICA DE COBERTURA
         cobertura_por_frame = []
         node_offset = 0
-        for y in y_coords:
+        for i_y, y in enumerate(y_coords):
+            has_pillar_local = has_pillar and (distribuicao_pilares == "Em todos os pórticos" or i_y == 0 or i_y == len(y_coords) - 1)
             nos_cobertura_local = []
+            
             if sistema_principal == "Arco":
-                x_pts = [0] + list(np.linspace(0, vao_x, 9)) + [vao_x]
-                y_pts = [y] * 11
-                z_pts = ([0] if has_pillar else [altura_z]) + [altura_z + flecha_arco * (1 - (2*(x-vao_x/2)/vao_x)**2) for x in x_pts[1:-1]] + ([0] if has_pillar else [altura_z])
-                local_edges = [(0, 1), (9, 10)] if has_pillar else []
-                for i in range(1, 9): local_edges.append((i, i+1))
-                nos_cobertura_local = [node_offset + i for i in range(1, 10)]
+                x_arco = list(np.linspace(0, vao_x, 9))
+                z_arco = [altura_z + flecha_arco * (1 - (2*(x-vao_x/2)/vao_x)**2) for x in x_arco]
+                x_pts = ([0, vao_x] if has_pillar_local else []) + x_arco
+                y_pts = [y] * len(x_pts)
+                z_pts = ([0, 0] if has_pillar_local else []) + z_arco
+                off = 2 if has_pillar_local else 0
+                local_edges = [(0, off), (1, off + 8)] if has_pillar_local else []
+                for i in range(8): local_edges.append((off + i, off + i + 1))
+                nos_cobertura_local = [node_offset + off + i for i in range(9)]
 
             elif sistema_principal == "Tesoura Plana (Treliçada)":
                 if forma_cobertura == "1 Água":
                     x_sub = np.linspace(0, vao_x, n_paineis + 1)
-                    x_pts = ([0, vao_x] if has_pillar else []) + list(x_sub) + list(x_sub)
+                    x_pts = ([0, vao_x] if has_pillar_local else []) + list(x_sub) + list(x_sub)
                     y_pts = [y] * len(x_pts)
-                    z_base = [0, 0] if has_pillar else []
-                    z_pts = z_base + [altura_z] * (n_paineis + 1) + list(altura_z + (vao_x - x_sub) * (inclinacao / 100.0))
-                    off = 2 if has_pillar else 0
-                    local_edges = [(0, off), (1, off + n_paineis)] if has_pillar else []
+                    z_pts = ([0, 0] if has_pillar_local else []) + [altura_z] * (n_paineis + 1) + list(altura_z + (vao_x - x_sub) * (inclinacao / 100.0))
+                    off = 2 if has_pillar_local else 0
+                    local_edges = [(0, off), (1, off + n_paineis)] if has_pillar_local else []
                     idx_inf, idx_sup = off, off + (n_paineis + 1)
                     for i in range(n_paineis):
                         local_edges.extend([(idx_inf+i, idx_inf+i+1), (idx_sup+i, idx_sup+i+1), (idx_inf+i, idx_sup+i), (idx_inf+i, idx_sup+i+1)])
@@ -300,11 +312,11 @@ def main():
                     n_lado = n_paineis // 2
                     x_all = np.concatenate([np.linspace(0, vao_x/2, n_lado + 1), np.linspace(vao_x/2, vao_x, n_lado + 1)[1:]])
                     z_sup_local = np.where(x_all <= vao_x/2, altura_z + x_all*(inclinacao/100.0), altura_z + (vao_x-x_all)*(inclinacao/100.0))
-                    x_pts = ([0, vao_x] if has_pillar else []) + list(x_all) + list(x_all)
+                    x_pts = ([0, vao_x] if has_pillar_local else []) + list(x_all) + list(x_all)
                     y_pts = [y] * len(x_pts)
-                    z_pts = ([0, 0] if has_pillar else []) + [altura_z] * len(x_all) + list(z_sup_local)
-                    off = 2 if has_pillar else 0
-                    local_edges = [(0, off), (1, off + len(x_all) - 1)] if has_pillar else []
+                    z_pts = ([0, 0] if has_pillar_local else []) + [altura_z] * len(x_all) + list(z_sup_local)
+                    off = 2 if has_pillar_local else 0
+                    local_edges = [(0, off), (1, off + len(x_all) - 1)] if has_pillar_local else []
                     idx_inf, idx_sup, tot_p = off, off + len(x_all), len(x_all) - 1
                     for i in range(tot_p):
                         local_edges.extend([(idx_inf+i, idx_inf+i+1), (idx_sup+i, idx_sup+i+1), (idx_inf+i, idx_sup+i)])
@@ -315,19 +327,19 @@ def main():
             else: 
                 h_cum = altura_z + (vao_x / 2.0) * (inclinacao / 100.0)
                 if forma_cobertura == "2 Águas":
-                    x_pts = ([0, vao_x] if has_pillar else []) + [0, vao_x, vao_x/2]
+                    x_pts = ([0, vao_x] if has_pillar_local else []) + [0, vao_x, vao_x/2]
                     y_pts = [y] * len(x_pts)
-                    z_pts = ([0, 0] if has_pillar else []) + [altura_z, altura_z, h_cum]
-                    off = 2 if has_pillar else 0
-                    local_edges = ([(0, off), (1, off+1)] if has_pillar else []) + [(off, off+2), (off+2, off+1)]
+                    z_pts = ([0, 0] if has_pillar_local else []) + [altura_z, altura_z, h_cum]
+                    off = 2 if has_pillar_local else 0
+                    local_edges = ([(0, off), (1, off+1)] if has_pillar_local else []) + [(off, off+2), (off+2, off+1)]
                     nos_cobertura_local = [node_offset + off, node_offset + off + 2, node_offset + off + 1]
                 else:
                     h_cum = altura_z + vao_x * (inclinacao / 100.0)
-                    x_pts = ([0, vao_x] if has_pillar else []) + [0, vao_x]
+                    x_pts = ([0, vao_x] if has_pillar_local else []) + [0, vao_x]
                     y_pts = [y] * len(x_pts)
-                    z_pts = ([0, 0] if has_pillar else []) + [altura_z, h_cum]
-                    off = 2 if has_pillar else 0
-                    local_edges = ([(0, off), (1, off+1)] if has_pillar else []) + [(off, off+1)]
+                    z_pts = ([0, 0] if has_pillar_local else []) + [altura_z, h_cum]
+                    off = 2 if has_pillar_local else 0
+                    local_edges = ([(0, off), (1, off+1)] if has_pillar_local else []) + [(off, off+1)]
                     nos_cobertura_local = [node_offset + off, node_offset + off + 1]
 
             all_x.extend(x_pts); all_y.extend(y_pts); all_z.extend(z_pts)
@@ -335,6 +347,7 @@ def main():
             cobertura_por_frame.append(nos_cobertura_local)
             node_offset += len(x_pts)
             
+        # Conexões longitudinais
         for i in range(len(cobertura_por_frame) - 1):
             for p in range(len(cobertura_por_frame[i])):
                 edges.append((cobertura_por_frame[i][p], cobertura_por_frame[i+1][p]))
@@ -362,7 +375,6 @@ def main():
             with st.spinner("Calculando matriz de rigidez e esforços..."):
                 motor = MotorCalculo3D()
                 motor.construir_malha(all_x, all_y, all_z, edges, apoios_base)
-                # Para mezanino, usa tributária das vigotas
                 espacamento_calc = espacamento_vigota if sistema_principal == "Mezanino Metálico" else espacamento
                 motor.aplicar_carga_distribuida(q_elu, vao_x, espacamento_calc)
                 st.session_state.res_analise = motor.resolver()
@@ -417,13 +429,14 @@ def main():
             st.markdown("---")
             dados_relatorio = {
                 "sistema_principal": sistema_principal, "forma_cobertura": forma_cobertura,
-                "tipo_pilar": tipo_pilar, "apoios_base": apoios_base, "vao_x": vao_x, "comp_y": comp_y,
+                "tipo_pilar": tipo_pilar, "distribuicao_pilares": distribuicao_pilares,
+                "apoios_base": apoios_base, "vao_x": vao_x, "comp_y": comp_y,
                 "altura_z": altura_z, "espacamento": espacamento, "espacamento_vigota": espacamento_vigota,
-                "tipo_piso": tipo_piso, "g_total": g_total, "q_sobre": q_sobre, "q_vento_liquido": q_vento_liquido,
+                "tipo_piso": tipo_piso, "g_total": g_total, "q_sobre": q_sobre, "q_vento_liquido": q_vento_liquido if sistema_principal != "Mezanino Metálico" else 0.0,
                 "q_elu": q_elu, "tipo_aco": tipo_aco
             }
             texto_memoria = gerar_relatorio_txt(dados_relatorio, res, resultados_comp, tudo_aprovado)
-            st.download_button(label="📥 Baixar Memória de Cálculo (.txt)", data=texto_memoria, file_name="Memoria_Calculo_Mezanino.txt", mime="text/plain", type="primary")
+            st.download_button(label="📥 Baixar Memória de Cálculo (.txt)", data=texto_memoria, file_name="Memoria_Calculo.txt", mime="text/plain", type="primary")
             st.markdown("---")
 
             for v in resultados_comp:
