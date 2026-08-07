@@ -148,7 +148,10 @@ class MotorCalculo3D:
             esforcos_grupos = {}
             for b in self.barras:
                 if b['grupo'] not in esforcos_grupos:
-                    esforcos_grupos[b['grupo']] = {"n_max": 0.0, "v_max": 0.0, "m_max": 0.0, "d_max": 0.0}
+                    esforcos_grupos[b['grupo']] = {
+                        "n_max": 0.0, "v_max": 0.0, "m_max": 0.0, "d_max": 0.0,
+                        "n_pos": -1e9, "n_neg": 1e9, "v_pos": -1e9, "v_neg": 1e9, "m_pos": -1e9, "m_neg": 1e9
+                    }
 
             for i, barra in enumerate(self.barras):
                 n1, n2 = barra['n1'], barra['n2']
@@ -173,30 +176,34 @@ class MotorCalculo3D:
                     "My": (My1, My2), "Mz": (Mz1, Mz2)
                 })
 
-                n_max = max(abs(N1), abs(N2))
-                v_max = max(abs(Vy1), abs(Vy2), abs(Vz1), abs(Vz2))
-                m_max = max(abs(My1), abs(My2), abs(Mz1), abs(Mz2))
+                n_abs_max = max(abs(N1), abs(N2))
+                v_abs_max = max(abs(Vy1), abs(Vy2), abs(Vz1), abs(Vz2))
+                m_abs_max = max(abs(My1), abs(My2), abs(Mz1), abs(Mz2))
                 
-                # Deslocamento local interno da barra sob carga distribuída (Fórmula 5qL^4 / 384EI)
+                # Deslocamento local interno da barra sob carga distribuída
                 d_bow = 0.0
                 if i in self.fef_local:
                     L = np.sqrt((self.nos[n2][0]-self.nos[n1][0])**2 + (self.nos[n2][1]-self.nos[n1][1])**2 + (self.nos[n2][2]-self.nos[n1][2])**2)
                     if L > 0:
-                        # Recupera a carga linear a partir do momento de engastamento perfeito
                         q_z_local = (self.fef_local[i][4] * 12.0) / (L**2)
                         d_bow = abs((5.0 * q_z_local * (L**4)) / (384.0 * self.E * barra['Iy'])) * 1000.0
                 
-                # Deslocamento absoluto dos nós extremos
                 d_no1 = np.linalg.norm(U_completo[n1*6:n1*6+3]) * 1000.0
                 d_no2 = np.linalg.norm(U_completo[n2*6:n2*6+3]) * 1000.0
-                
-                # A flecha real final é o movimento dos apoios MAIS a curvatura interna
                 d_max = max(d_no1, d_no2) + d_bow
 
-                esforcos_grupos[grp]["n_max"] = max(esforcos_grupos[grp]["n_max"], n_max)
-                esforcos_grupos[grp]["v_max"] = max(esforcos_grupos[grp]["v_max"], v_max)
-                esforcos_grupos[grp]["m_max"] = max(esforcos_grupos[grp]["m_max"], m_max)
+                esforcos_grupos[grp]["n_max"] = max(esforcos_grupos[grp]["n_max"], n_abs_max)
+                esforcos_grupos[grp]["v_max"] = max(esforcos_grupos[grp]["v_max"], v_abs_max)
+                esforcos_grupos[grp]["m_max"] = max(esforcos_grupos[grp]["m_max"], m_abs_max)
                 esforcos_grupos[grp]["d_max"] = max(esforcos_grupos[grp]["d_max"], d_max)
+
+                # Rastreio de sinais para o relatório (Legenda Máx e Mín)
+                esforcos_grupos[grp]["n_pos"] = max(esforcos_grupos[grp]["n_pos"], N1, N2)
+                esforcos_grupos[grp]["n_neg"] = min(esforcos_grupos[grp]["n_neg"], N1, N2)
+                esforcos_grupos[grp]["v_pos"] = max(esforcos_grupos[grp]["v_pos"], Vz1, Vz2)
+                esforcos_grupos[grp]["v_neg"] = min(esforcos_grupos[grp]["v_neg"], Vz1, Vz2)
+                esforcos_grupos[grp]["m_pos"] = max(esforcos_grupos[grp]["m_pos"], My1, My2)
+                esforcos_grupos[grp]["m_neg"] = min(esforcos_grupos[grp]["m_neg"], My1, My2)
 
             F_total = K_global @ U_completo
             reacoes = {}
@@ -216,7 +223,8 @@ class MotorCalculo3D:
                 "n_max_kn": global_n, "v_max_kn": global_v, "m_max_knm": global_m, "desloc_max_mm": global_d,
                 "esforcos": esforcos, "reacoes": reacoes, "nos": self.nos, 
                 "barras": [(b['n1'], b['n2']) for b in self.barras],
-                "esforcos_grupos": esforcos_grupos
+                "esforcos_grupos": esforcos_grupos,
+                "deslocamentos_nodais": U_completo.tolist() # Exportando vetor 3D completo p/ desenho
             }
         except Exception as e:
             return {"sucesso": False, "erro": str(e)}
