@@ -1,6 +1,6 @@
 import numpy as np
 
-# Catálogo de Perfis Laminados (Linha W Gerdau e Perfis I Padrão Americano)
+# Catálogo de Perfis Laminados (Linha W Gerdau e Perfis Especiais)
 CATALOGO_LAMINADOS = {
     "W 150 x 13.0": {"familia": "Laminado W", "d": 148, "bf": 100, "tw": 4.3, "tf": 4.9, "A": 16.6, "Ix": 634, "Iy": 82, "Wx": 85.7, "Wy": 16.4},
     "W 150 x 18.0": {"familia": "Laminado W", "d": 153, "bf": 102, "tw": 5.8, "tf": 7.1, "A": 23.0, "Ix": 923, "Iy": 126, "Wx": 120.7, "Wy": 24.7},
@@ -8,16 +8,18 @@ CATALOGO_LAMINADOS = {
     "W 200 x 22.5": {"familia": "Laminado W", "d": 206, "bf": 102, "tw": 6.2, "tf": 8.0, "A": 28.6, "Ix": 2029, "Iy": 142, "Wx": 197.0, "Wy": 27.9},
     "W 250 x 25.3": {"familia": "Laminado W", "d": 257, "bf": 102, "tw": 6.1, "tf": 8.4, "A": 32.2, "Ix": 3415, "Iy": 149, "Wx": 265.8, "Wy": 29.3},
     "W 310 x 32.7": {"familia": "Laminado W", "d": 308, "bf": 102, "tw": 6.6, "tf": 10.8, "A": 41.7, "Ix": 6524, "Iy": 192, "Wx": 423.6, "Wy": 37.7},
-    
-    # Novos perfis solicitados
     "W 360 x 22.0": {"familia": "Laminado W", "d": 356, "bf": 152, "tw": 5.1, "tf": 6.4, "A": 28.5, "Ix": 5800, "Iy": 320, "Wx": 325.0, "Wy": 42.0},
     "W 360 x 44.0": {"familia": "Laminado W", "d": 352, "bf": 171, "tw": 6.9, "tf": 9.8, "A": 56.1, "Ix": 12185, "Iy": 816, "Wx": 692.3, "Wy": 95.5},
+    
+    # Perfis Pesados e Remontados (Vigas Alveolares/Casteladas expandidas)
+    "W 360 x 122 (Original)": {"familia": "Laminado W Pesado", "d": 363, "bf": 257, "tw": 13.0, "tf": 22.0, "A": 154.6, "Ix": 36435, "Iy": 6231, "Wx": 2007.4, "Wy": 484.9},
+    "W 360 x 122 (Remontado)": {"familia": "Viga Castelada", "d": 544, "bf": 257, "tw": 13.0, "tf": 22.0, "A": 178.1, "Ix": 90616, "Iy": 6234, "Wx": 3331.0, "Wy": 485.0},
+    
     "Perfil I 10 x 4 5/8\"": {"familia": "Laminado I Padrão", "d": 254, "bf": 117.5, "tw": 7.9, "tf": 12.5, "A": 48.2, "Ix": 5120, "Iy": 265, "Wx": 403.0, "Wy": 45.0},
 }
 
-# Catálogo de Perfis de Chapa Dobrada (Perfis U Simples da Tabela + U Enrijecidos e Cantoneiras)
+# Catálogo de Perfis de Chapa Dobrada (U Simples, U Enrijecidos e Cantoneiras)
 CATALOGO_CHAPA_DOBRADA = {
-    # Perfis U Simples (Tabela NBR)
     # --- h = 50 mm, B = 25 mm ---
     "U 50 x 25 x 2.00": {"familia": "Chapa Dobrada U", "d": 50, "bf": 25, "tw": 2.00, "tf": 2.00, "A": 1.75, "Ix": 6.66, "Iy": 1.07, "Wx": 2.60, "Wy": 0.60},
     "U 50 x 25 x 2.25": {"familia": "Chapa Dobrada U", "d": 50, "bf": 25, "tw": 2.25, "tf": 2.25, "A": 2.07, "Ix": 7.70, "Iy": 1.26, "Wx": 3.00, "Wy": 0.71},
