@@ -2,6 +2,8 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 from datetime import datetime
+import tempfile
+import os
 
 try:
     from fpdf import FPDF
@@ -17,7 +19,6 @@ def desenhar_diagrama(res, tipo_diagrama):
     fig = go.Figure()
     nos, barras, esforcos = res["nos"], res["barras"], res["esforcos"]
     
-    # Se for deformada, desenha a estrutura original fina e cinza tracejada
     if tipo_diagrama == "Deslocamentos (Deformada)":
         for n1, n2 in barras:
             x1, y1, z1 = nos[n1]
@@ -32,7 +33,7 @@ def desenhar_diagrama(res, tipo_diagrama):
             scale = 0.0
             if max_disp > 1e-6:
                 dim_max = max(np.max(coords_arr[:, 0]), np.max(coords_arr[:, 1]), np.max(coords_arr[:, 2]))
-                scale = (dim_max * 0.1) / max_disp # Escala para 10% da dimensão máxima
+                scale = (dim_max * 0.1) / max_disp 
 
             for n1, n2 in barras:
                 x1 = nos[n1][0] + U[n1*6] * scale
@@ -140,7 +141,7 @@ Status Global da Estrutura: {status_global}
 ---------------------------------------------------------
 """
     for grp, esf in res_analise.get('esforcos_grupos', {}).items():
-        if esf["n_pos"] == -1e9: continue # Ignora grupos vazios ou sem esforço válido
+        if esf["n_pos"] == -1e9: continue
         relatorio += f"[{grp.upper()}]\n"
         relatorio += f"  Normal (N)   -> Máx (Tração): {esf['n_pos']:.2f} kN | Mín (Comp): {esf['n_neg']:.2f} kN\n"
         relatorio += f"  Cortante (V) -> Máx: {esf['v_pos']:.2f} kN | Mín: {esf['v_neg']:.2f} kN\n"
@@ -177,13 +178,40 @@ Coeficiente de Minoração (γ_a1) = {gamma_a1}
         relatorio += f"  >> STATUS DA PEÇA: {status_comp} (Taxa Máxima: {v['taxa_maxima']:.1f}%)\n.........................................................\n\n"
     return relatorio
 
-def gerar_relatorio_pdf(texto_memoria):
+def gerar_relatorio_pdf(texto_memoria, res_analise=None):
     if FPDF is None: return None
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Courier", size=9) 
     for linha in texto_memoria.split('\n'):
         pdf.multi_cell(0, 5, txt=linha.encode('latin-1', 'replace').decode('latin-1'))
+        
+    if res_analise:
+        try:
+            pdf.add_page()
+            pdf.set_font("Courier", 'B', 12)
+            pdf.cell(0, 10, "6. ANEXO - DIAGRAMAS 3D", ln=True)
+            pdf.set_font("Courier", size=9)
+            
+            diagramas = ["Deslocamentos (Deformada)", "Momento Fletor (My)", "Reações de Apoio"]
+            
+            for diag in diagramas:
+                fig = desenhar_diagrama(res_analise, diag)
+                fig.update_layout(paper_bgcolor='white', plot_bgcolor='white')
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                    fig.write_image(tmp.name, width=800, height=600)
+                    pdf.cell(0, 10, f"-> {diag}:", ln=True)
+                    pdf.image(tmp.name, x=10, w=190)
+                    pdf.ln(5)
+                    tmp_path = tmp.name
+                
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    
+        except Exception as e:
+            pdf.multi_cell(0, 5, txt=f"\n[Aviso: Não foi possível gerar os diagramas no PDF. Verifique a instalação do 'kaleido'. Detalhe: {e}]")
+
     out = pdf.output(dest='S')
     return out.encode('latin-1') if isinstance(out, str) else bytes(out)
 
@@ -528,7 +556,8 @@ def main():
                 with col_d1: st.download_button("📄 Baixar TXT", data=texto_memoria, file_name="Calculo.txt", use_container_width=True)
                 with col_d2:
                     if FPDF is not None:
-                        st.download_button("📥 Baixar PDF", data=gerar_relatorio_pdf(texto_memoria), file_name="Calculo_Detalhado.pdf", mime="application/pdf", type="primary", use_container_width=True)
+                        # Quando o botão é clicado, tenta embutir os diagramas
+                        st.download_button("📥 Baixar PDF com Anexos 3D", data=gerar_relatorio_pdf(texto_memoria, res), file_name="Calculo_Detalhado.pdf", mime="application/pdf", type="primary", use_container_width=True)
 
                 st.markdown("---")
                 for v in resultados_comp:
