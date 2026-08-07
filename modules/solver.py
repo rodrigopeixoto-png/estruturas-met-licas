@@ -2,7 +2,6 @@ import numpy as np
 
 class MotorCalculo3D:
     def __init__(self):
-        """Motor Matricial 3D com Propriedades Reais por Elemento e Agrupamento de Esforços"""
         self.E = 200e6  # kPa (200 GPa)
         self.G = 77e6   # kPa (77 GPa)
         self.nos = []
@@ -13,11 +12,17 @@ class MotorCalculo3D:
 
     def construir_malha(self, nos_x, nos_y, nos_z, barras_info, tipo_apoio_base):
         self.nos = list(zip(nos_x, nos_y, nos_z))
-        self.barras = barras_info  # Lista de dicionários: {'n1', 'n2', 'A', 'Iy', 'Iz', 'J', 'grupo'}
+        self.barras = barras_info
         self.apoios = []
         
+        if not self.nos: return
+        
+        # O PULO DO GATO: Encontra o nível mais baixo da estrutura para ancorar
+        z_min = min(nos_z)
+        
         for i, (x, y, z) in enumerate(self.nos):
-            if z <= 1e-4:
+            # Trava os nós que estiverem na base da estrutura, seja no Z=0 ou no mezanino suspenso
+            if z <= z_min + 1e-4:
                 if "Engastado" in tipo_apoio_base:
                     self.apoios.extend([i*6 + dof for dof in range(6)])
                 else:
@@ -25,7 +30,7 @@ class MotorCalculo3D:
 
     def _get_T(self, dx, dy, dz, L):
         cx, cy, cz = dx/L, dy/L, dz/L
-        if abs(cx) < 1e-4 and abs(cy) < 1e-4: # Barra Vertical (Pilares)
+        if abs(cx) < 1e-4 and abs(cy) < 1e-4: 
             r3x3 = np.array([[0, 0, cz], [0, 1, 0], [-cz, 0, 0]])
         else:
             D = np.sqrt(cx**2 + cy**2)
@@ -84,8 +89,12 @@ class MotorCalculo3D:
         for i, barra in enumerate(self.barras):
             n1, n2 = barra['n1'], barra['n2']
             z1, z2 = self.nos[n1][2], self.nos[n2][2]
-            # Aplica carga distribuída apenas nas barras horizontais superiores
-            if min(z1, z2) >= 0.1 and barra['grupo'] not in ["Pilares Metálicos", "Montantes", "Diagonais"]:
+            
+            # Avalia se a barra é estritamente vertical
+            is_vertical = abs(z1 - z2) > 1e-2 and abs(self.nos[n1][0] - self.nos[n2][0]) < 1e-2 and abs(self.nos[n1][1] - self.nos[n2][1]) < 1e-2
+            
+            # Aplica carga apenas nas vigas superiores
+            if not is_vertical and barra['grupo'] not in ["Pilares Metálicos", "Pilares Concreto", "Montantes", "Diagonais"]:
                 x1, y1, _ = self.nos[n1]
                 x2, y2, _ = self.nos[n2]
                 L = np.sqrt((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2)
@@ -126,7 +135,6 @@ class MotorCalculo3D:
 
             dofs_livres = [d for d in range(num_dofs) if d not in self.apoios]
             
-            # Estabilização leve para matrizes singulares
             max_k = np.max(np.diag(K_global)) if len(K_global) > 0 else 1.0
             for d in dofs_livres:
                 if K_global[d, d] < 1e-6 * max_k:
@@ -193,8 +201,14 @@ class MotorCalculo3D:
                 if no not in reacoes: reacoes[no] = [0.0]*6
                 reacoes[no][eixo] = float(F_total[dof] - self.cargas_nodais[dof])
 
+            global_n = max([v["n_max"] for k, v in esforcos_grupos.items()]) if esforcos_grupos else 0.0
+            global_v = max([v["v_max"] for k, v in esforcos_grupos.items()]) if esforcos_grupos else 0.0
+            global_m = max([v["m_max"] for k, v in esforcos_grupos.items()]) if esforcos_grupos else 0.0
+            global_d = max([v["d_max"] for k, v in esforcos_grupos.items()]) if esforcos_grupos else 0.0
+
             return {
                 "sucesso": True, "num_nos": len(self.nos), "num_barras": len(self.barras),
+                "n_max_kn": global_n, "v_max_kn": global_v, "m_max_knm": global_m, "desloc_max_mm": global_d,
                 "esforcos": esforcos, "reacoes": reacoes, "nos": self.nos, 
                 "barras": [(b['n1'], b['n2']) for b in self.barras],
                 "esforcos_grupos": esforcos_grupos
