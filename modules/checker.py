@@ -1,6 +1,6 @@
 import numpy as np
 
-# Catálogo de Perfis Laminados (Linha W Gerdau)
+# Catálogo de Perfis Laminados (Linha W Gerdau e Perfis I Padrão Americano)
 CATALOGO_LAMINADOS = {
     "W 150 x 13.0": {"familia": "Laminado W", "d": 148, "bf": 100, "tw": 4.3, "tf": 4.9, "A": 16.6, "Ix": 634, "Iy": 82, "Wx": 85.7, "Wy": 16.4},
     "W 150 x 18.0": {"familia": "Laminado W", "d": 153, "bf": 102, "tw": 5.8, "tf": 7.1, "A": 23.0, "Ix": 923, "Iy": 126, "Wx": 120.7, "Wy": 24.7},
@@ -8,7 +8,11 @@ CATALOGO_LAMINADOS = {
     "W 200 x 22.5": {"familia": "Laminado W", "d": 206, "bf": 102, "tw": 6.2, "tf": 8.0, "A": 28.6, "Ix": 2029, "Iy": 142, "Wx": 197.0, "Wy": 27.9},
     "W 250 x 25.3": {"familia": "Laminado W", "d": 257, "bf": 102, "tw": 6.1, "tf": 8.4, "A": 32.2, "Ix": 3415, "Iy": 149, "Wx": 265.8, "Wy": 29.3},
     "W 310 x 32.7": {"familia": "Laminado W", "d": 308, "bf": 102, "tw": 6.6, "tf": 10.8, "A": 41.7, "Ix": 6524, "Iy": 192, "Wx": 423.6, "Wy": 37.7},
+    
+    # Novos perfis solicitados
+    "W 360 x 22.0": {"familia": "Laminado W", "d": 356, "bf": 152, "tw": 5.1, "tf": 6.4, "A": 28.5, "Ix": 5800, "Iy": 320, "Wx": 325.0, "Wy": 42.0},
     "W 360 x 44.0": {"familia": "Laminado W", "d": 352, "bf": 171, "tw": 6.9, "tf": 9.8, "A": 56.1, "Ix": 12185, "Iy": 816, "Wx": 692.3, "Wy": 95.5},
+    "Perfil I 10 x 4 5/8\"": {"familia": "Laminado I Padrão", "d": 254, "bf": 117.5, "tw": 7.9, "tf": 12.5, "A": 48.2, "Ix": 5120, "Iy": 265, "Wx": 403.0, "Wy": 45.0},
 }
 
 # Catálogo de Perfis de Chapa Dobrada (Perfis U Simples da Tabela + U Enrijecidos e Cantoneiras)
