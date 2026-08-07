@@ -112,14 +112,7 @@ Status Global da Estrutura: {status_global}
 - Sobrecarga Normativa de Uso (Q): {dados['q_sobre']:.2f} kN/m²
 >> CARGA DE PROJETO COMBINADA (ELU): {dados['q_elu']:.2f} kN/m²
 
-3. ESFORÇOS SOLICITANTES MÁXIMOS GLOBAIS (MATRICIAL 3D)
----------------------------------------------------------
-- Esforço Normal Máximo (N_sd): {res_analise['n_max_kn']:.2f} kN
-- Esforço Cortante Máximo (V_sd): {res_analise['v_max_kn']:.2f} kN
-- Momento Fletor Máximo (M_sd): {res_analise['m_max_knm']:.2f} kNm
-- Deslocamento Máximo (Flecha ELS): {res_analise['desloc_max_mm']:.2f} mm
-
-4. VERIFICAÇÃO DETALHADA POR COMPONENTE (NBR 8800)
+3. VERIFICAÇÃO DETALHADA POR COMPONENTE (NBR 8800)
 ---------------------------------------------------------
 Propriedades do Material: {dados['tipo_aco']} (fy = {fy_mpa} MPa = {fy_kncm2:.1f} kN/cm²)
 Coeficiente de Minoração da Resistência (γ_a1) = {gamma_a1}
@@ -137,7 +130,7 @@ Coeficiente de Minoração da Resistência (γ_a1) = {gamma_a1}
         relatorio += f"[{v['componente'].upper()}]\n"
         relatorio += f"  Perfil Selecionado: {v['perfil']} ({v['familia']})\n"
         
-        relatorio += f"  A. ESFORÇOS ATUANTES DE CÁLCULO (Sd)\n"
+        relatorio += f"  A. ESFORÇOS ATUANTES DE CÁLCULO MÁXIMOS (Sd)\n"
         relatorio += f"     N_Sd = {v['N_sd']:.2f} kN\n"
         relatorio += f"     V_Sd = {v['V_sd']:.2f} kN\n"
         relatorio += f"     M_Sd = {v['M_sd']:.2f} kNm\n\n"
@@ -164,8 +157,8 @@ Coeficiente de Minoração da Resistência (γ_a1) = {gamma_a1}
         relatorio += f"     Checagem: {v['M_sd']:.2f} kNm / {v['M_rd']:.2f} kNm = {v['ratio_M']:.1f}%\n\n"
 
         relatorio += f"  F. VERIFICAÇÃO DE DEFORMAÇÃO ELS (FLECHA)\n"
-        relatorio += f"     Fórmula: δ_lim = Vão_X / 250\n"
-        relatorio += f"     Cálculo: δ_lim = ({dados['vao_x']:.2f} * 1000) / 250 = {v['delta_lim_mm']:.1f} mm\n"
+        relatorio += f"     Fórmula: δ_lim = Vão / 250\n"
+        relatorio += f"     Cálculo: δ_lim = {v['delta_lim_mm']:.1f} mm\n"
         relatorio += f"     Checagem: {v['D_sd']:.2f} mm / {v['delta_lim_mm']:.1f} mm = {v['ratio_delta']:.1f}%\n\n"
 
         relatorio += f"  >> STATUS DA PEÇA: {status_comp} (Taxa Máxima: {v['taxa_maxima']:.1f}%)\n"
@@ -268,7 +261,19 @@ def main():
     st.sidebar.subheader("🌪️ Cargas / Vento")
     if sistema_principal == "Mezanino / Passarela Metálica":
         tipo_piso = st.sidebar.selectbox("Tipo de Piso", ["Painel Wall / Masterboard (0.30 kN/m²)", "Steel Deck + Concreto (2.00 kN/m²)", "Chapa Xadrez Metálica (0.40 kN/m²)", "Painel OSB / Madeira (0.25 kN/m²)"])
-        sobrecarga_opcao = st.sidebar.selectbox("Uso / Sobrecarga", ["Escritórios / Leve (2.50 kN/m²)", "Residencial (1.50 kN/m²)", "Comercial / Lojas (3.00 kN/m²)", "Depósito Leve (4.00 kN/m²)", "Depósito Pesado (5.00 kN/m²)", "Passarela - Manutenção/Sem Público (3.00 kN/m²)", "Passarela - Acesso Público (5.00 kN/m²)"])
+        sobrecarga_opcao = st.sidebar.selectbox(
+            "Uso / Sobrecarga", 
+            [
+                "Escritórios / Leve (2.50 kN/m²)", 
+                "Residencial (1.50 kN/m²)", 
+                "Comercial / Lojas (3.00 kN/m²)", 
+                "Depósito Leve (4.00 kN/m²)", 
+                "Depósito Pesado (5.00 kN/m²)", 
+                "Passarela - Manutenção/Sem Público (3.00 kN/m²)", 
+                "Passarela - Acesso Público (5.00 kN/m²)",
+                "Academias / Ginástica (3.00 kN/m²)" 
+            ]
+        )
         peso_piso = float(tipo_piso.split("(")[1].split(" ")[0])
         carga_inst = 0.15
         g_total = peso_piso + carga_inst
@@ -317,8 +322,9 @@ def main():
         if has_pillar:
             for i_y, y_p in enumerate(y_coords):
                 if distribuicao_pilares == "Apenas nos 4 cantos extremos" and i_y != 0 and i_y != (len(y_coords) - 1): continue
-                edges_raw.append({"n1": add_no(0, y_p, 0), "n2": add_no(0, y_p, altura_z), "grupo": "Pilares Metálicos"})
-                edges_raw.append({"n1": add_no(vao_x, y_p, 0), "n2": add_no(vao_x, y_p, altura_z), "grupo": "Pilares Metálicos"})
+                # Modificado para sempre adicionar pilares à visualização, mesmo se de concreto
+                edges_raw.append({"n1": add_no(0, y_p, 0), "n2": add_no(0, y_p, altura_z), "grupo": "Pilares Metálicos" if tipo_pilar == "Pilar Metálico" else "Pilares Concreto"})
+                edges_raw.append({"n1": add_no(vao_x, y_p, 0), "n2": add_no(vao_x, y_p, altura_z), "grupo": "Pilares Metálicos" if tipo_pilar == "Pilar Metálico" else "Pilares Concreto"})
 
     else:
         for i_y, y in enumerate(y_coords):
@@ -330,8 +336,8 @@ def main():
             n_cum = add_no(vao_x/2, y, h_cum)
 
             if has_pillar_local:
-                edges_raw.append({"n1": n_bE, "n2": n_tE, "grupo": "Pilares Metálicos"})
-                edges_raw.append({"n1": n_bD, "n2": n_tD, "grupo": "Pilares Metálicos"})
+                 edges_raw.append({"n1": n_bE, "n2": n_tE, "grupo": "Pilares Metálicos" if tipo_pilar == "Pilar Metálico" else "Pilares Concreto"})
+                 edges_raw.append({"n1": n_bD, "n2": n_tD, "grupo": "Pilares Metálicos" if tipo_pilar == "Pilar Metálico" else "Pilares Concreto"})
                 
             edges_raw.append({"n1": n_tE, "n2": n_cum, "grupo": "Banzo Superior"})
             edges_raw.append({"n1": n_cum, "n2": n_tD, "grupo": "Banzo Superior"})
@@ -343,9 +349,14 @@ def main():
 
     # ATRIBUIÇÃO FÍSICA PARA MATRIZ
     barras_prontas = []
+    barras_visualizacao = []
+    
     for edge in edges_raw:
         grp = edge["grupo"]
+        barras_visualizacao.append({"n1": edge["n1"], "n2": edge["n2"], "grupo": grp})
+        
         nome_perf = mapa_perfis.get(grp)
+        # Pilares de concreto não entram na análise do solver metálico, mas devem ser visualizados
         if nome_perf is None: continue 
         
         props = obter_propriedades(nome_perf)
@@ -356,10 +367,17 @@ def main():
 
     with tab1:
         fig = go.Figure()
-        for b in barras_prontas:
+        # Usa barras_visualizacao para desenhar todos os elementos, incluindo concreto
+        for b in barras_visualizacao:
             x1, y1, z1 = all_x[b["n1"]], all_y[b["n1"]], all_z[b["n1"]]
             x2, y2, z2 = all_x[b["n2"]], all_y[b["n2"]], all_z[b["n2"]]
-            fig.add_trace(go.Scatter3d(x=[x1, x2], y=[y1, y2], z=[z1, z2], mode='lines', line=dict(color='blue', width=4), showlegend=False))
+            
+            # Cor diferente para pilar de concreto
+            line_color = 'gray' if b["grupo"] == "Pilares Concreto" else 'blue'
+            line_width = 6 if b["grupo"] == "Pilares Concreto" else 4
+            
+            fig.add_trace(go.Scatter3d(x=[x1, x2], y=[y1, y2], z=[z1, z2], mode='lines', line=dict(color=line_color, width=line_width), showlegend=False))
+            
         fig.update_layout(scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=550)
         st.plotly_chart(fig, use_container_width=True)
 
@@ -392,7 +410,10 @@ def main():
             tudo_aprovado = True
 
             for grupo, esf_grp in res["esforcos_grupos"].items():
-                nome_perfil = mapa_perfis[grupo]
+                nome_perfil = mapa_perfis.get(grupo)
+                # Pula a verificação metálica se for Pilar de Concreto
+                if nome_perfil is None: continue 
+                
                 v = verificador.verificar_elemento(
                     nome_perfil, 
                     esf_grp["n_max"], esf_grp["v_max"], esf_grp["m_max"], esf_grp["d_max"], 
