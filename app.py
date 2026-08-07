@@ -17,28 +17,54 @@ def desenhar_diagrama(res, tipo_diagrama):
     fig = go.Figure()
     nos, barras, esforcos = res["nos"], res["barras"], res["esforcos"]
     
-    for n1, n2 in barras:
-        x1, y1, z1 = nos[n1]
-        x2, y2, z2 = nos[n2]
-        fig.add_trace(go.Scatter3d(
-            x=[x1, x2], y=[y1, y2], z=[z1, z2],
-            mode='lines', line=dict(color='lightgrey', width=2), showlegend=False
-        ))
-        
-    if tipo_diagrama == "Reações de Apoio":
+    # Se for deformada, desenha a estrutura original fina e cinza tracejada
+    if tipo_diagrama == "Deslocamentos (Deformada)":
+        for n1, n2 in barras:
+            x1, y1, z1 = nos[n1]
+            x2, y2, z2 = nos[n2]
+            fig.add_trace(go.Scatter3d(x=[x1, x2], y=[y1, y2], z=[z1, z2], mode='lines', line=dict(color='lightgrey', width=1, dash='dash'), showlegend=False))
+            
+        U = res.get("deslocamentos_nodais", [])
+        if U:
+            U_arr = np.array(U)
+            max_disp = np.max(np.abs(U_arr))
+            coords_arr = np.array(nos)
+            scale = 0.0
+            if max_disp > 1e-6:
+                dim_max = max(np.max(coords_arr[:, 0]), np.max(coords_arr[:, 1]), np.max(coords_arr[:, 2]))
+                scale = (dim_max * 0.1) / max_disp # Escala para 10% da dimensão máxima
+
+            for n1, n2 in barras:
+                x1 = nos[n1][0] + U[n1*6] * scale
+                y1 = nos[n1][1] + U[n1*6+1] * scale
+                z1 = nos[n1][2] + U[n1*6+2] * scale
+                
+                x2 = nos[n2][0] + U[n2*6] * scale
+                y2 = nos[n2][1] + U[n2*6+1] * scale
+                z2 = nos[n2][2] + U[n2*6+2] * scale
+                
+                fig.add_trace(go.Scatter3d(x=[x1, x2], y=[y1, y2], z=[z1, z2], mode='lines', line=dict(color='red', width=5), showlegend=False))
+
+    elif tipo_diagrama == "Reações de Apoio":
+        for n1, n2 in barras:
+            x1, y1, z1 = nos[n1]
+            x2, y2, z2 = nos[n2]
+            fig.add_trace(go.Scatter3d(x=[x1, x2], y=[y1, y2], z=[z1, z2], mode='lines', line=dict(color='lightgrey', width=2), showlegend=False))
+            
         rx, ry, rz, texts = [], [], [], []
         for no_idx, reac in res["reacoes"].items():
             x, y, z = nos[no_idx]
             Fx, Fy, Fz = reac[0], reac[1], reac[2]
             rx.append(x); ry.append(y); rz.append(z)
             texts.append(f"Fz: {Fz:.1f}kN<br>Fx: {Fx:.1f}kN<br>Fy: {Fy:.1f}kN")
-        
-        fig.add_trace(go.Scatter3d(
-            x=rx, y=ry, z=rz, mode='markers+text',
-            marker=dict(size=8, color='purple', symbol='diamond'),
-            text=texts, textposition="top center", textfont=dict(size=11, color='purple'), showlegend=False
-        ))
+        fig.add_trace(go.Scatter3d(x=rx, y=ry, z=rz, mode='markers+text', marker=dict(size=8, color='purple', symbol='diamond'), text=texts, textposition="top center", textfont=dict(size=11, color='purple'), showlegend=False))
+    
     else:
+        for n1, n2 in barras:
+            x1, y1, z1 = nos[n1]
+            x2, y2, z2 = nos[n2]
+            fig.add_trace(go.Scatter3d(x=[x1, x2], y=[y1, y2], z=[z1, z2], mode='lines', line=dict(color='lightgrey', width=2), showlegend=False))
+
         max_val = 1e-5
         for esf in esforcos:
             v1, v2 = (esf["N"] if "Normal" in tipo_diagrama else (esf["Vz"] if "Cortante" in tipo_diagrama else esf["My"]))
@@ -53,24 +79,16 @@ def desenhar_diagrama(res, tipo_diagrama):
             L = np.sqrt(dx**2 + dy**2 + dz**2)
             if L == 0: continue
             
-            if "Normal" in tipo_diagrama:
-                v1, v2 = esf["N"]
-                cor = 'royalblue' if (v1+v2) > 0 else 'crimson'
-            elif "Cortante" in tipo_diagrama:
-                v1, v2 = esf["Vz"]
-                cor = 'seagreen'
-            else:
-                v1, v2 = esf["My"]
-                cor = 'darkorange'
+            if "Normal" in tipo_diagrama: cor = 'royalblue' if (esf["N"][0]+esf["N"][1]) > 0 else 'crimson'
+            elif "Cortante" in tipo_diagrama: cor = 'seagreen'
+            else: cor = 'darkorange'
                 
+            v1, v2 = (esf["N"] if "Normal" in tipo_diagrama else (esf["Vz"] if "Cortante" in tipo_diagrama else esf["My"]))
             nx, ny, nz = (1, 0, 0) if abs(dz)/L > 0.95 else (0, 0, 1)
             ox1, oy1, oz1 = x1 + nx*v1*escala, y1 + ny*v1*escala, z1 + nz*v1*escala
             ox2, oy2, oz2 = x2 + nx*v2*escala, y2 + ny*v2*escala, z2 + nz*v2*escala
             
-            fig.add_trace(go.Scatter3d(
-                x=[x1, ox1, ox2, x2], y=[y1, oy1, oy2, y2], z=[z1, oz1, oz2, z2],
-                mode='lines', line=dict(color=cor, width=3), showlegend=False
-            ))
+            fig.add_trace(go.Scatter3d(x=[x1, ox1, ox2, x2], y=[y1, oy1, oy2, y2], z=[z1, oz1, oz2, z2], mode='lines', line=dict(color=cor, width=3), showlegend=False))
 
     fig.update_layout(scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=600)
     return fig
@@ -118,7 +136,19 @@ Status Global da Estrutura: {status_global}
 - Momento Fletor Máximo (M_sd): {res_analise.get('m_max_knm', 0.0):.2f} kNm
 - Deslocamento Máximo (Flecha ELS): {res_analise.get('desloc_max_mm', 0.0):.2f} mm
 
-4. VERIFICAÇÃO DETALHADA POR COMPONENTE (NBR 8800)
+4. TABELA DE ESFORÇOS EXTREMOS (LEGENDAS DOS DIAGRAMAS)
+---------------------------------------------------------
+"""
+    for grp, esf in res_analise.get('esforcos_grupos', {}).items():
+        if esf["n_pos"] == -1e9: continue # Ignora grupos vazios ou sem esforço válido
+        relatorio += f"[{grp.upper()}]\n"
+        relatorio += f"  Normal (N)   -> Máx (Tração): {esf['n_pos']:.2f} kN | Mín (Comp): {esf['n_neg']:.2f} kN\n"
+        relatorio += f"  Cortante (V) -> Máx: {esf['v_pos']:.2f} kN | Mín: {esf['v_neg']:.2f} kN\n"
+        relatorio += f"  Momento (M)  -> Máx (+): {esf['m_pos']:.2f} kNm | Mín (-): {esf['m_neg']:.2f} kNm\n"
+        relatorio += f"  Flecha Máx   -> {esf['d_max']:.2f} mm\n\n"
+
+    relatorio += f"""
+5. VERIFICAÇÃO DETALHADA POR COMPONENTE (NBR 8800)
 ---------------------------------------------------------
 Propriedades do Material: {dados['tipo_aco']} (fy = {fy_mpa} MPa = {fy_kncm2:.1f} kN/cm²)
 Coeficiente de Minoração (γ_a1) = {gamma_a1}
@@ -134,7 +164,7 @@ Coeficiente de Minoração (γ_a1) = {gamma_a1}
         status_comp = "APROVADO" if v['aprovado'] else "REPROVADO"
 
         relatorio += f"[{v['componente'].upper()}]\n  Perfil Selecionado: {v['perfil']} ({v['familia']})\n"
-        relatorio += f"  A. ESFORÇOS ATUANTES MÁXIMOS (Sd)\n     N_Sd = {v['N_sd']:.2f} kN | V_Sd = {v['V_sd']:.2f} kN | M_Sd = {v['M_sd']:.2f} kNm\n\n"
+        relatorio += f"  A. ESFORÇOS ATUANTES MÁXIMOS EM MÓDULO ABSOLUTO (Sd)\n     N_Sd = {v['N_sd']:.2f} kN | V_Sd = {v['V_sd']:.2f} kN | M_Sd = {v['M_sd']:.2f} kNm\n\n"
         relatorio += f"  B. PROPRIEDADES GEOMÉTRICAS DA SEÇÃO\n"
         relatorio += f"     Área Bruta (A) = {A:.2f} cm²\n"
         relatorio += f"     Módulo Resistente Elástico (Wx) = {Wx:.2f} cm³\n"
@@ -159,11 +189,10 @@ def gerar_relatorio_pdf(texto_memoria):
 
 def obter_propriedades(nome_perfil):
     p = CATALOGO_COMPLETO[nome_perfil]
-    # CORREÇÃO FÍSICA: Para flexão vertical, a inércia relevante na matriz 3D é o Ix do catálogo.
     return {
         "A": p["A"] * 1e-4,          
-        "Iy": p["Ix"] * 1e-8,  # Eixo Forte assume a flexão da gravidade
-        "Iz": p["Iy"] * 1e-8,  # Eixo Fraco assume a flexão lateral
+        "Iy": p["Ix"] * 1e-8, 
+        "Iz": p["Iy"] * 1e-8,  
         "J": (p["Iy"] * 1e-8) / 2.0  
     }
 
@@ -215,7 +244,6 @@ def main():
         perf_pil = st.sidebar.selectbox("Pilares", lista_perfis, index=lista_perfis.index("W 200 x 22.5")) if tipo_pilar == "Pilar Metálico" else None
         perf_v_prin = st.sidebar.selectbox("Vigas Principais (Longitudinais)", lista_perfis, index=lista_perfis.index("W 360 x 122 (Remontado)"))
         perf_v_sec = st.sidebar.selectbox("Vigas Secundárias (Transversais)", lista_perfis, index=lista_perfis.index("W 150 x 18.0"))
-        
         mapa_perfis = {"Pilares Metálicos": perf_pil, "Vigas Principais (Longitudinais)": perf_v_prin, "Vigas Secundárias (Transversais)": perf_v_sec}
     else:
         perf_pil = st.sidebar.selectbox("Pilares", lista_perfis, index=lista_perfis.index("W 250 x 25.3")) if tipo_pilar == "Pilar Metálico" else None
@@ -224,7 +252,6 @@ def main():
         perf_bz_inf = st.sidebar.selectbox("Banzo Inferior", lista_perfis, index=lista_perfis.index("U 150 x 50 x 3.00"))
         perf_diag = st.sidebar.selectbox("Diagonais", lista_perfis, index=lista_perfis.index('2x L 2" x 3/16" (Dupla)'))
         perf_mont = st.sidebar.selectbox("Montantes", lista_perfis, index=lista_perfis.index("UE 100 x 50 x 17 x 2.25"))
-
         mapa_perfis = {"Pilares Metálicos": perf_pil, "Terças de Cobertura": perf_terca, "Banzo Superior": perf_bz_sup, "Banzo Inferior": perf_bz_inf, "Diagonais": perf_diag, "Montantes": perf_mont}
 
     st.sidebar.markdown("---")
@@ -368,7 +395,7 @@ def main():
                         apoios_idx.update([n_tE, n_tD])
                 cobertura_por_frame.append(idx_sup)
 
-            else: # Pórtico Alma Cheia
+            else: 
                 n_tE = add_no(0, y, altura_z)
                 n_tD = add_no(vao_x, y, altura_z)
                 
@@ -517,7 +544,7 @@ def main():
 
     with tab5:
         if st.session_state.res_analise and st.session_state.res_analise.get("sucesso"):
-            tipo_diagrama = st.selectbox("Visualizar:", ["Esforço Normal (Tração/Compressão)", "Esforço Cortante (Vz)", "Momento Fletor (My)", "Reações de Apoio"])
+            tipo_diagrama = st.selectbox("Visualizar:", ["Deslocamentos (Deformada)", "Esforço Normal (Tração/Compressão)", "Esforço Cortante (Vz)", "Momento Fletor (My)", "Reações de Apoio"])
             st.plotly_chart(desenhar_diagrama(st.session_state.res_analise, tipo_diagrama), use_container_width=True)
 
 if __name__ == "__main__":
