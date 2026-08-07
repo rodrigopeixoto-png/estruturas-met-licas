@@ -10,23 +10,18 @@ class MotorCalculo3D:
         self.cargas_nodais = []
         self.fef_local = {}
 
-    def construir_malha(self, nos_x, nos_y, nos_z, barras_info, tipo_apoio_base):
+    def construir_malha(self, nos_x, nos_y, nos_z, barras_info, apoios_idx, tipo_apoio_base):
         self.nos = list(zip(nos_x, nos_y, nos_z))
         self.barras = barras_info
         self.apoios = []
         
         if not self.nos: return
         
-        # O PULO DO GATO: Encontra o nível mais baixo da estrutura para ancorar
-        z_min = min(nos_z)
-        
-        for i, (x, y, z) in enumerate(self.nos):
-            # Trava os nós que estiverem na base da estrutura, seja no Z=0 ou no mezanino suspenso
-            if z <= z_min + 1e-4:
-                if "Engastado" in tipo_apoio_base:
-                    self.apoios.extend([i*6 + dof for dof in range(6)])
-                else:
-                    self.apoios.extend([i*6 + dof for dof in range(3)])
+        for i in apoios_idx:
+            if "Engastado" in tipo_apoio_base:
+                self.apoios.extend([i*6 + dof for dof in range(6)])
+            else:
+                self.apoios.extend([i*6 + dof for dof in range(3)])
 
     def _get_T(self, dx, dy, dz, L):
         cx, cy, cz = dx/L, dy/L, dz/L
@@ -90,10 +85,8 @@ class MotorCalculo3D:
             n1, n2 = barra['n1'], barra['n2']
             z1, z2 = self.nos[n1][2], self.nos[n2][2]
             
-            # Avalia se a barra é estritamente vertical
             is_vertical = abs(z1 - z2) > 1e-2 and abs(self.nos[n1][0] - self.nos[n2][0]) < 1e-2 and abs(self.nos[n1][1] - self.nos[n2][1]) < 1e-2
             
-            # Aplica carga apenas nas vigas superiores
             if not is_vertical and barra['grupo'] not in ["Pilares Metálicos", "Pilares Concreto", "Montantes", "Diagonais"]:
                 x1, y1, _ = self.nos[n1]
                 x2, y2, _ = self.nos[n2]
